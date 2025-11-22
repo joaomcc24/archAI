@@ -1,135 +1,136 @@
-# Turborepo starter
+# AI Architecture Assistant
 
-This Turborepo starter is maintained by the Turborepo core team.
+<div align="center">
+  
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com)
+[![Status](https://img.shields.io/badge/Status-Beta-orange)]()
 
-## Using this example
+  </div>
+  
+**Automated technical documentation and task planning for modern engineering teams.**
 
-Run the following command:
+The AI Architecture Assistant is a developer-tooling SaaS that connects to GitHub repositories, parses the Abstract Syntax Tree (AST) of the codebase, and uses Large Language Models (LLMs) to generate accurate, always-up-to-date `architecture.md` and actionable `task.md` plans.
 
-```sh
-npx create-turbo@latest
-```
+---
 
-## What's inside?
+## Why this exists
+Development teams waste significant hours manually documenting codebase changes and scoping tasks. This tool solves the **"Documentation Drift"** problem by:
+1.  **Ingesting** live code from GitHub.
+2.  **Generating** high-level architectural snapshots.
+3.  **converting** natural language feature requests into granular, file-specific engineering tasks.
 
-This Turborepo includes the following packages/apps:
+---
 
-### Apps and Packages
+## Key Engineering Features
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+### Context-Aware LLM Pipeline
+Instead of blindly feeding code to an LLM, this system uses a custom **RAG-lite approach**:
+* **RepoParserService:** Normalizes file trees and detects languages/frameworks to build a "map" of the repository.
+* **Token Optimization:** Intelligently selects only relevant file snippets (e.g., `schema.prisma`, `package.json`, key controllers) to maximize context window efficiency while reducing hallucination risk.
+* **Structured Output:** Enforces strict Markdown schemas for `architecture.md` (identifying Service Layers, DB Models, and State Management).
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+### Secure & Event-Driven Architecture
+* **GitHub OAuth:** Secure authentication flow storing installation IDs via Supabase.
+* **Snapshot Versioning:** Stores historical architecture states to track project evolution over time.
+* **Monorepo Structure:** Built with **Turborepo** separating the Next.js frontend (`apps/web`) from the Node.js/Express backend (`apps/api`) and shared logic (`packages/common`).
 
-### Utilities
+---
 
-This Turborepo has some additional tools already setup for you:
+## Tech Stack
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+| Domain | Technology |
+| :--- | :--- |
+| **Frontend** | React (Next.js), TailwindCSS, shadcn/ui |
+| **Backend** | Node.js, TypeScript, Express |
+| **Database** | Supabase (PostgreSQL, Auth) |
+| **AI** | OpenAI API (GPT-4o), Custom Prompt Engineering |
+| **Infra** | Vercel (Frontend), Supabase Edge/Render (Backend) |
 
-### Build
+---
 
-To build all apps and packages, run the following command:
+## Architecture
 
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
-```
-
-You can build a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
-
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
-
-### Develop
-
-To develop all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+```mermaid
+graph TD
+    User[User] -->|Auth| Web["Web App (Next.js)"]
+    Web -->|API Actions| API["Backend API (Node.js)"]
+    API -->|OAuth| GH[GitHub API]
+    API -->|Store/Fetch| DB[("Supabase Postgres")]
+    
+    subgraph "Core Logic"
+    API -->|Trigger| Parser[Repo Parser Service]
+    Parser -->|File Tree & Snippets| LLM[LLM Orchestrator]
+    LLM -->|Generate Docs| OpenAI[OpenAI API]
+    end
+    
+    LLM -->|Save Artifacts| Storage[Supabase Storage]
 
 ```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+---
+
+## 📂 Project Structure
+
+```bash
+/apps
+  /web         # Next.js frontend (Dashboard, Repo Onboarding)
+  /api         # Node.js backend (Webhooks, Parser, LLM Service)
+/packages
+  /common      # Shared types (Zod schemas), Utilities
+  /llm         # Prompt templates and context logic
 ```
 
-### Remote Caching
+---
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+## Getting Started
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+### Prerequisites
+* Node.js 18+
+* pnpm
+* Supabase Project & OpenAI API Key
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+### Installation
 
-```
-cd my-turborepo
+1.  **Clone the repository**
+    ```bash
+    git clone [https://github.com/yourusername/ai-architecture-assistant.git](https://github.com/yourusername/ai-architecture-assistant.git)
+    cd ai-architecture-assistant
+    ```
 
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
+2.  **Install dependencies**
+    ```bash
+    pnpm install
+    ```
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
+3.  **Environment Setup**
+    Create a `.env` file in `apps/api` and `apps/web` based on `.env.example`.
+    ```bash
+    # Required keys
+    DATABASE_URL=...
+    OPENAI_API_KEY=...
+    GITHUB_CLIENT_ID=...
+    ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+4.  **Run Development Server**
+    ```bash
+    pnpm turbo dev
+    ```
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+---
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
+## 🗺 Roadmap
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
+- [x] GitHub OAuth Integration
+- [x] Basic File Tree Parsing
+- [x] `architecture.md` Generation
+- [ ] Drift Detection (Compare current repo vs. last snapshot)
+- [ ] `task.md` Generation for Feature Requests
+- [ ] Stripe Billing Integration
 
-## Useful Links
+---
 
-Learn more about the power of Turborepo:
+## 🤝 Contributing
 
-- [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.com/docs/reference/configuration)
-- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+This project is currently in **Alpha**. Suggestions and PRs are welcome!
