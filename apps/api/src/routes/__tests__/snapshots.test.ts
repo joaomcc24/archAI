@@ -1,5 +1,14 @@
 import request from 'supertest';
 
+// Mock auth middleware to bypass authentication
+jest.mock('../../middleware/auth', () => ({
+  authenticateToken: (req: any, res: any, next: any) => {
+    req.userId = 'test-user-id';
+    req.user = { id: 'test-user-id', email: 'test@example.com' };
+    next();
+  },
+}));
+
 // Mock Supabase before importing app
 jest.mock('../../lib/supabase', () => ({
   supabase: {
@@ -16,16 +25,34 @@ jest.mock('../../services/SnapshotService', () => ({
   },
 }));
 
+// Mock ProjectService for ownership checks
+jest.mock('../../services/ProjectService', () => ({
+  ProjectService: {
+    getProjectById: jest.fn(),
+  },
+}));
+
 // Import app after mocking
 import app from '../../index';
 import { SnapshotService } from '../../services/SnapshotService';
+import { ProjectService } from '../../services/ProjectService';
 
-const mockedSnapshotService =
-  SnapshotService as jest.Mocked<typeof SnapshotService>;
+const mockedSnapshotService = SnapshotService as jest.Mocked<typeof SnapshotService>;
+const mockedProjectService = ProjectService as jest.Mocked<typeof ProjectService>;
+
+const mockProject = {
+  id: 'project-123',
+  user_id: 'test-user-id',
+  repo_name: 'testuser/test-repo',
+  installation_id: '12345',
+  created_at: '2024-01-01T00:00:00Z',
+};
 
 describe('Snapshots Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Default: project exists and belongs to user
+    mockedProjectService.getProjectById.mockResolvedValue(mockProject);
   });
 
   describe('GET /api/snapshots', () => {
@@ -34,20 +61,18 @@ describe('Snapshots Routes', () => {
         {
           id: 'snapshot-1',
           project_id: 'project-123',
-          markdown: '# Architecture 1',
+          content: '# Architecture',
           created_at: '2024-01-01T00:00:00Z',
         },
         {
           id: 'snapshot-2',
           project_id: 'project-123',
-          markdown: '# Architecture 2',
+          content: '# Updated Architecture',
           created_at: '2024-01-02T00:00:00Z',
         },
       ];
 
-      mockedSnapshotService.getSnapshotsByProjectId.mockResolvedValue(
-        mockSnapshots
-      );
+      mockedSnapshotService.getSnapshotsByProjectId.mockResolvedValue(mockSnapshots);
 
       const response = await request(app)
         .get('/api/snapshots')
@@ -55,9 +80,7 @@ describe('Snapshots Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.snapshots).toEqual(mockSnapshots);
-      expect(
-        mockedSnapshotService.getSnapshotsByProjectId
-      ).toHaveBeenCalledWith('project-123');
+      expect(mockedSnapshotService.getSnapshotsByProjectId).toHaveBeenCalledWith('project-123');
     });
 
     it('should return error when projectId is missing', async () => {
@@ -65,9 +88,21 @@ describe('Snapshots Routes', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Project ID is required');
-      expect(
-        mockedSnapshotService.getSnapshotsByProjectId
-      ).not.toHaveBeenCalled();
+      expect(mockedSnapshotService.getSnapshotsByProjectId).not.toHaveBeenCalled();
+    });
+
+    it('should return 403 when user does not own the project', async () => {
+      mockedProjectService.getProjectById.mockResolvedValue({
+        ...mockProject,
+        user_id: 'different-user-id',
+      });
+
+      const response = await request(app)
+        .get('/api/snapshots')
+        .query({ projectId: 'project-123' });
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Access denied');
     });
 
     it('should handle service errors gracefully', async () => {
@@ -101,7 +136,7 @@ describe('Snapshots Routes', () => {
       const mockSnapshot = {
         id: 'snapshot-123',
         project_id: 'project-123',
-        markdown: '# Test Architecture\n\nThis is a test.',
+        content: '# Architecture',
         created_at: '2024-01-01T00:00:00Z',
       };
 
@@ -111,9 +146,7 @@ describe('Snapshots Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.snapshot).toEqual(mockSnapshot);
-      expect(mockedSnapshotService.getSnapshotById).toHaveBeenCalledWith(
-        'snapshot-123'
-      );
+      expect(mockedSnapshotService.getSnapshotById).toHaveBeenCalledWith('snapshot-123');
     });
 
     it('should return 404 when snapshot not found', async () => {
@@ -143,34 +176,26 @@ describe('Snapshots Routes', () => {
       const mockSnapshot = {
         id: 'snapshot-latest',
         project_id: 'project-123',
-        markdown: '# Latest Architecture',
-        created_at: '2024-01-02T00:00:00Z',
+        content: '# Latest Architecture',
+        created_at: '2024-01-03T00:00:00Z',
       };
 
       mockedSnapshotService.getLatestSnapshot.mockResolvedValue(mockSnapshot);
 
-      const response = await request(app).get(
-        '/api/snapshots/project/project-123/latest'
-      );
+      const response = await request(app).get('/api/snapshots/project/project-123/latest');
 
       expect(response.status).toBe(200);
       expect(response.body.snapshot).toEqual(mockSnapshot);
-      expect(mockedSnapshotService.getLatestSnapshot).toHaveBeenCalledWith(
-        'project-123'
-      );
+      expect(mockedSnapshotService.getLatestSnapshot).toHaveBeenCalledWith('project-123');
     });
 
     it('should return 404 when no snapshots exist for project', async () => {
       mockedSnapshotService.getLatestSnapshot.mockResolvedValue(null);
 
-      const response = await request(app).get(
-        '/api/snapshots/project/project-123/latest'
-      );
+      const response = await request(app).get('/api/snapshots/project/project-123/latest');
 
       expect(response.status).toBe(404);
-      expect(response.body.error).toBe(
-        'No snapshots found for this project'
-      );
+      expect(response.body.error).toBe('No snapshots found for this project');
     });
 
     it('should handle service errors gracefully', async () => {
@@ -178,9 +203,7 @@ describe('Snapshots Routes', () => {
         new Error('Database error')
       );
 
-      const response = await request(app).get(
-        '/api/snapshots/project/project-123/latest'
-      );
+      const response = await request(app).get('/api/snapshots/project/project-123/latest');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Failed to fetch latest snapshot');
@@ -188,7 +211,3 @@ describe('Snapshots Routes', () => {
     });
   });
 });
-
-
-
-

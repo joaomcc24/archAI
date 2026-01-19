@@ -22,17 +22,97 @@ export interface RepoTreeResponse {
   }>;
 }
 
+export interface RepoInfo {
+  default_branch: string;
+  name: string;
+  full_name: string;
+  description: string | null;
+}
+
 export class RepoParserService {
   private readonly githubApiBase = 'https://api.github.com';
 
+  /**
+   * Fetch repository info including the default branch
+   */
+  async fetchRepoInfo(repoName: string, accessToken: string): Promise<RepoInfo> {
+    try {
+      const response = await axios.get(
+        `${this.githubApiBase}/repos/${repoName}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'ArchAssistant/1.0',
+          },
+        }
+      );
+
+      return {
+        default_branch: response.data.default_branch,
+        name: response.data.name,
+        full_name: response.data.full_name,
+        description: response.data.description,
+      };
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message = error.response?.data?.message || error.message;
+        throw new Error(`Failed to fetch repo info: ${message}`);
+      }
+      throw new Error(`Failed to fetch repo info: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Fetch all branches for a repository
+   */
+  async fetchBranches(
+    repoName: string,
+    accessToken: string
+  ): Promise<Array<{ name: string; isDefault: boolean }>> {
+    try {
+      // First get the default branch
+      const repoInfo = await this.fetchRepoInfo(repoName, accessToken);
+      
+      // Then fetch all branches
+      const response = await axios.get(
+        `${this.githubApiBase}/repos/${repoName}/branches?per_page=100`,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'ArchAssistant/1.0',
+          },
+        }
+      );
+
+      return response.data.map((branch: { name: string }) => ({
+        name: branch.name,
+        isDefault: branch.name === repoInfo.default_branch,
+      }));
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const message = error.response?.data?.message || error.message;
+        throw new Error(`Failed to fetch branches: ${message}`);
+      }
+      throw new Error(`Failed to fetch branches: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Fetch repo tree, auto-detecting the default branch if not specified
+   */
   async fetchRepoTree(
     repoName: string,
     accessToken: string,
-    branch: string = 'main'
+    branch?: string
   ): Promise<RepoTreeResponse> {
     try {
+      // If no branch specified, fetch the repo's default branch
+      const targetBranch = branch || (await this.fetchRepoInfo(repoName, accessToken)).default_branch;
+      
       const response = await axios.get(
-        `${this.githubApiBase}/repos/${repoName}/git/trees/${branch}?recursive=1`,
+        `${this.githubApiBase}/repos/${repoName}/git/trees/${targetBranch}?recursive=1`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -144,11 +224,14 @@ export class RepoParserService {
     repoName: string,
     filePath: string,
     accessToken: string,
-    branch: string = 'main'
+    branch?: string
   ): Promise<string> {
     try {
+      // If no branch specified, fetch the repo's default branch
+      const targetBranch = branch || (await this.fetchRepoInfo(repoName, accessToken)).default_branch;
+      
       const response = await axios.get(
-        `${this.githubApiBase}/repos/${repoName}/contents/${filePath}?ref=${branch}`,
+        `${this.githubApiBase}/repos/${repoName}/contents/${filePath}?ref=${targetBranch}`,
         {
           headers: {
             'Authorization': `Bearer ${accessToken}`,

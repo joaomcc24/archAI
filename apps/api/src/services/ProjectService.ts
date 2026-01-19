@@ -5,15 +5,35 @@ export class ProjectService {
   static async createProject(
     userId: string,
     repoName: string,
-    installationId: string
+    installationId: string,
+    githubToken?: string,
+    branch?: string
   ): Promise<Project> {
+    const insertData: {
+      user_id: string;
+      repo_name: string;
+      installation_id: string;
+      github_token?: string;
+      branch?: string;
+    } = {
+      user_id: userId,
+      repo_name: repoName,
+      installation_id: installationId,
+    };
+
+    // Store token if provided (in production, encrypt before storing)
+    if (githubToken) {
+      insertData.github_token = githubToken;
+    }
+
+    // Store branch if provided
+    if (branch) {
+      insertData.branch = branch;
+    }
+
     const { data, error } = await supabase
       .from('projects')
-      .insert({
-        user_id: userId,
-        repo_name: repoName,
-        installation_id: installationId,
-      })
+      .insert(insertData)
       .select()
       .single();
 

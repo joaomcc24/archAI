@@ -85,7 +85,7 @@ describe('RepoParserService', () => {
 
       await expect(
         repoParserService.fetchRepoTree('test/repo', 'invalid-token')
-      ).rejects.toThrow('Failed to fetch repo tree: Not Found');
+      ).rejects.toThrow('Failed to fetch repo tree: Failed to fetch repo info: Not Found');
     });
 
     it('should handle network errors', async () => {
@@ -93,7 +93,7 @@ describe('RepoParserService', () => {
 
       await expect(
         repoParserService.fetchRepoTree('test/repo', 'mock-token')
-      ).rejects.toThrow('Failed to fetch repo tree: Network Error');
+      ).rejects.toThrow('Failed to fetch repo tree: Failed to fetch repo info: Network Error');
     });
   });
 
@@ -297,7 +297,7 @@ describe('RepoParserService', () => {
 
       await expect(
         repoParserService.fetchFileContent('test/repo', 'nonexistent.md', 'mock-token')
-      ).rejects.toThrow('Failed to fetch file content: Not Found');
+      ).rejects.toThrow('Failed to fetch file content: Failed to fetch repo info: Not Found');
     });
   });
 });

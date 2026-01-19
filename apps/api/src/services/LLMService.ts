@@ -1,11 +1,12 @@
 import OpenAI from 'openai';
 import { RepoFile } from './RepoParserService';
 
-type LLMProvider = 'openai' | 'ollama';
+type LLMProvider = 'openai' | 'ollama' | 'groq';
 
 export class LLMService {
   private provider: LLMProvider;
   private openai?: OpenAI;
+  private groq?: OpenAI; // Groq uses OpenAI-compatible API
   private ollamaConfig?: {
     baseUrl: string;
     model: string;
@@ -13,7 +14,14 @@ export class LLMService {
 
   constructor() {
     const provider = (process.env.LLM_PROVIDER || 'openai').toLowerCase();
-    this.provider = provider === 'ollama' ? 'ollama' : 'openai';
+    
+    if (provider === 'ollama') {
+      this.provider = 'ollama';
+    } else if (provider === 'groq') {
+      this.provider = 'groq';
+    } else {
+      this.provider = 'openai';
+    }
 
     if (this.provider === 'ollama') {
       const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
@@ -23,6 +31,16 @@ export class LLMService {
         baseUrl,
         model,
       };
+    } else if (this.provider === 'groq') {
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) {
+        throw new Error('GROQ_API_KEY environment variable is not set');
+      }
+      // Groq uses OpenAI-compatible API
+      this.groq = new OpenAI({
+        apiKey,
+        baseURL: 'https://api.groq.com/openai/v1',
+      });
     } else {
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
@@ -121,6 +139,10 @@ Format as well-structured markdown with:
         return await this.generateWithOllama(prompt);
       }
 
+      if (this.provider === 'groq') {
+        return await this.generateWithGroq(prompt);
+      }
+
       return await this.generateWithOpenAI(prompt);
     } catch (error) {
       throw new Error(`Failed to generate architecture markdown: ${this.formatError(error)}`);
@@ -153,6 +175,38 @@ Format as well-structured markdown with:
 
     if (!content) {
       throw new Error('No content generated from OpenAI');
+    }
+
+    return content;
+  }
+
+  private async generateWithGroq(prompt: string): Promise<string> {
+    if (!this.groq) {
+      throw new Error('Groq client not initialized');
+    }
+
+    const completion = await this.groq.chat.completions.create({
+      // llama-3.3-70b-versatile is the best free model for code analysis
+      model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are an expert software architect. Generate clear, comprehensive architecture documentation for codebases. Be specific, cite actual files, and avoid assumptions.',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      temperature: 0.5, // Lower temp for more consistent output
+      max_tokens: 8000, // Groq supports larger context
+    });
+
+    const content = completion.choices[0]?.message?.content;
+
+    if (!content) {
+      throw new Error('No content generated from Groq');
     }
 
     return content;
@@ -224,7 +278,9 @@ Format as well-structured markdown with:
   }
 
   private formatError(error: unknown): string {
-    if (this.provider === 'openai') {
+    if (this.provider === 'openai' || this.provider === 'groq') {
+      const providerName = this.provider === 'groq' ? 'Groq' : 'OpenAI';
+      
       if (error && typeof error === 'object') {
         const status = 'status' in error ? (error as { status?: number }).status : undefined;
         const details =
@@ -233,7 +289,7 @@ Format as well-structured markdown with:
             : undefined;
 
         if (status === 429) {
-          return 'OpenAI API quota exceeded. Check your plan and billing details.';
+          return `${providerName} API rate limit exceeded. Please wait and try again.`;
         }
 
         if (details) {
@@ -241,7 +297,7 @@ Format as well-structured markdown with:
         }
       }
 
-      return 'Unknown OpenAI error occurred';
+      return `Unknown ${providerName} error occurred`;
     }
 
     if (error instanceof Error) {

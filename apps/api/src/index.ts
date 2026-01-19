@@ -5,6 +5,8 @@ import helmet from 'helmet';
 import { authRoutes } from './routes/auth';
 import { projectRoutes } from './routes/projects';
 import { snapshotRoutes } from './routes/snapshots';
+import { taskRoutes } from './routes/tasks';
+import { authenticateToken } from './middleware/auth';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -13,9 +15,13 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
+// Public routes
 app.use('/api/auth', authRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/snapshots', snapshotRoutes);
+
+// Protected routes
+app.use('/api/projects', authenticateToken, projectRoutes);
+app.use('/api/snapshots', authenticateToken, snapshotRoutes);
+app.use('/api/tasks', authenticateToken, taskRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

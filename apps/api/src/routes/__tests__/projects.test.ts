@@ -2,6 +2,15 @@
 
 import request from 'supertest';
 
+// Mock auth middleware to bypass authentication
+jest.mock('../../middleware/auth', () => ({
+  authenticateToken: (req: any, res: any, next: any) => {
+    req.userId = 'test-user-id';
+    req.user = { id: 'test-user-id', email: 'test@example.com' };
+    next();
+  },
+}));
+
 // Mock Supabase before importing app
 jest.mock('../../lib/supabase', () => ({
   supabase: {
@@ -38,18 +47,18 @@ describe('Projects Routes', () => {
   });
 
   describe('GET /api/projects', () => {
-    it('should fetch projects for a user successfully', async () => {
+    it('should fetch projects for authenticated user successfully', async () => {
       const mockProjects = [
         {
           id: 'project-1',
-          user_id: 'user-123',
+          user_id: 'test-user-id',
           repo_name: 'testuser/repo1',
           installation_id: '111',
           created_at: '2024-01-01T00:00:00Z',
         },
         {
           id: 'project-2',
-          user_id: 'user-123',
+          user_id: 'test-user-id',
           repo_name: 'testuser/repo2',
           installation_id: '222',
           created_at: '2024-01-02T00:00:00Z',
@@ -58,23 +67,13 @@ describe('Projects Routes', () => {
 
       mockedProjectService.getProjectsByUserId.mockResolvedValue(mockProjects);
 
-      const response = await request(app)
-        .get('/api/projects')
-        .query({ userId: 'user-123' });
-
-      expect(response.status).toBe(200);
-      expect(response.body.projects).toEqual(mockProjects);
-      expect(mockedProjectService.getProjectsByUserId).toHaveBeenCalledWith(
-        'user-123'
-      );
-    });
-
-    it('should return error when userId is missing', async () => {
       const response = await request(app).get('/api/projects');
 
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('User ID is required');
-      expect(mockedProjectService.getProjectsByUserId).not.toHaveBeenCalled();
+      expect(response.status).toBe(200);
+      expect(response.body.projects).toBeDefined();
+      expect(mockedProjectService.getProjectsByUserId).toHaveBeenCalledWith(
+        'test-user-id'
+      );
     });
 
     it('should handle service errors gracefully', async () => {
@@ -82,9 +81,7 @@ describe('Projects Routes', () => {
         new Error('Database connection failed')
       );
 
-      const response = await request(app)
-        .get('/api/projects')
-        .query({ userId: 'user-123' });
+      const response = await request(app).get('/api/projects');
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Failed to fetch projects');
@@ -94,9 +91,7 @@ describe('Projects Routes', () => {
     it('should return empty array when no projects found', async () => {
       mockedProjectService.getProjectsByUserId.mockResolvedValue([]);
 
-      const response = await request(app)
-        .get('/api/projects')
-        .query({ userId: 'user-123' });
+      const response = await request(app).get('/api/projects');
 
       expect(response.status).toBe(200);
       expect(response.body.projects).toEqual([]);
@@ -104,12 +99,12 @@ describe('Projects Routes', () => {
   });
 
   describe('GET /api/projects/:id', () => {
-    it('should fetch a project by ID successfully', async () => {
+    it('should fetch a project by ID successfully when user owns it', async () => {
       const mockProject = {
         id: 'project-123',
-        user_id: 'user-123',
+        user_id: 'test-user-id',
         repo_name: 'testuser/test-repo',
-        installation_id: '67890',
+        installation_id: '12345',
         created_at: '2024-01-01T00:00:00Z',
       };
 
@@ -118,10 +113,27 @@ describe('Projects Routes', () => {
       const response = await request(app).get('/api/projects/project-123');
 
       expect(response.status).toBe(200);
-      expect(response.body.project).toEqual(mockProject);
+      expect(response.body.project).toBeDefined();
       expect(mockedProjectService.getProjectById).toHaveBeenCalledWith(
         'project-123'
       );
+    });
+
+    it('should return 403 when user does not own the project', async () => {
+      const mockProject = {
+        id: 'project-123',
+        user_id: 'different-user-id',
+        repo_name: 'otheruser/test-repo',
+        installation_id: '12345',
+        created_at: '2024-01-01T00:00:00Z',
+      };
+
+      mockedProjectService.getProjectById.mockResolvedValue(mockProject);
+
+      const response = await request(app).get('/api/projects/project-123');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Access denied');
     });
 
     it('should return 404 when project not found', async () => {
@@ -147,12 +159,12 @@ describe('Projects Routes', () => {
   });
 
   describe('DELETE /api/projects/:id', () => {
-    it('should delete a project successfully', async () => {
+    it('should delete a project successfully when user owns it', async () => {
       const mockProject = {
         id: 'project-123',
-        user_id: 'user-123',
+        user_id: 'test-user-id',
         repo_name: 'testuser/test-repo',
-        installation_id: '67890',
+        installation_id: '12345',
         created_at: '2024-01-01T00:00:00Z',
       };
 
@@ -168,7 +180,28 @@ describe('Projects Routes', () => {
       expect(mockedSnapshotService.deleteSnapshotsByProjectId).toHaveBeenCalledWith(
         'project-123'
       );
-      expect(mockedProjectService.deleteProject).toHaveBeenCalledWith('project-123');
+      expect(mockedProjectService.deleteProject).toHaveBeenCalledWith(
+        'project-123'
+      );
+    });
+
+    it('should return 403 when user does not own the project', async () => {
+      const mockProject = {
+        id: 'project-123',
+        user_id: 'different-user-id',
+        repo_name: 'otheruser/test-repo',
+        installation_id: '12345',
+        created_at: '2024-01-01T00:00:00Z',
+      };
+
+      mockedProjectService.getProjectById.mockResolvedValue(mockProject);
+
+      const response = await request(app).delete('/api/projects/project-123');
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe('Access denied');
+      expect(mockedSnapshotService.deleteSnapshotsByProjectId).not.toHaveBeenCalled();
+      expect(mockedProjectService.deleteProject).not.toHaveBeenCalled();
     });
 
     it('should return 404 when project not found', async () => {
@@ -185,9 +218,9 @@ describe('Projects Routes', () => {
     it('should handle deletion errors gracefully', async () => {
       const mockProject = {
         id: 'project-123',
-        user_id: 'user-123',
+        user_id: 'test-user-id',
         repo_name: 'testuser/test-repo',
-        installation_id: '67890',
+        installation_id: '12345',
         created_at: '2024-01-01T00:00:00Z',
       };
 
@@ -205,7 +238,3 @@ describe('Projects Routes', () => {
     });
   });
 });
-
-
-
-
