@@ -1,15 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "../../../../contexts/AuthContext";
+import { ProtectedRoute } from "../../../../components/ProtectedRoute";
+import { supabase } from "../../../../lib/supabase";
 
-export default function GithubCallbackPage() {
+function GithubCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user, loading } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("Finishing GitHub connection…");
+  
+  // Prevent double-execution in React Strict Mode
+  const hasExchanged = useRef(false);
 
   useEffect(() => {
+    // Wait for auth to load
+    if (loading) return;
+    
+    // Prevent double-execution
+    if (hasExchanged.current) return;
+    
     const code = searchParams.get("code");
     const state = searchParams.get("state");
 
@@ -20,13 +33,29 @@ export default function GithubCallbackPage() {
         return;
       }
 
+      if (!user) {
+        setError("Please sign in first");
+        setStatus("");
+        return;
+      }
+
+      // Mark as exchanged to prevent duplicate calls
+      hasExchanged.current = true;
+
       try {
-        setStatus("Creating project…");
-        const fallbackUserId = '00000000-0000-0000-0000-000000000001';
+        setStatus("Exchanging authorization code…");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          throw new Error('No session found');
+        }
+
         const res = await fetch('/api/auth/github/callback', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, state, userId: fallbackUserId })
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ code, state })
         });
 
         const data = await res.json();
@@ -34,19 +63,19 @@ export default function GithubCallbackPage() {
           throw new Error(data.error || 'GitHub OAuth failed');
         }
 
-        if (data.githubToken) {
-          sessionStorage.setItem('githubToken', data.githubToken);
-        }
-
-        router.replace('/dashboard');
+        // Redirect to repository selection page
+        const reposParam = encodeURIComponent(JSON.stringify(data.repositories));
+        router.replace(`/connect/select?repos=${reposParam}&token=${data.githubToken}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to finish GitHub OAuth');
         setStatus("");
+        // Reset so user can retry
+        hasExchanged.current = false;
       }
     };
 
     exchangeCode();
-  }, [router, searchParams]);
+  }, [router, searchParams, user, loading]);
 
   return (
     <div style={{
@@ -68,6 +97,14 @@ export default function GithubCallbackPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function GithubCallbackPage() {
+  return (
+    <ProtectedRoute>
+      <GithubCallbackContent />
+    </ProtectedRoute>
   );
 }
 

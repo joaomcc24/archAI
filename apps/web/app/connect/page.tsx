@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { ProtectedRoute } from "../../components/ProtectedRoute";
 
-export default function ConnectPage() {
+function ConnectPageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,5 +120,13 @@ export default function ConnectPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ConnectPage() {
+  return (
+    <ProtectedRoute>
+      <ConnectPageContent />
+    </ProtectedRoute>
   );
 }

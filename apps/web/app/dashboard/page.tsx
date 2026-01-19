@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { Button } from "@repo/ui/button";
+import { useAuth } from "../../contexts/AuthContext";
+import { ProtectedRoute } from "../../components/ProtectedRoute";
+import { supabase } from "../../lib/supabase";
 
 interface Project {
   id: string;
@@ -18,27 +21,73 @@ interface Snapshot {
   created_at: string;
 }
 
+interface Task {
+  id: string;
+  project_id: string;
+  snapshot_id: string;
+  title: string;
+  description: string;
+  markdown: string;
+  created_at: string;
+  project_name?: string;
+}
+
 interface ProjectWithSnapshots extends Project {
   latestSnapshot: Snapshot | null;
   snapshotCount: number;
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
+  const { user, signOut } = useAuth();
   const [projects, setProjects] = useState<ProjectWithSnapshots[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState<{ [projectId: string]: boolean }>({});
   const [deleting, setDeleting] = useState<{ [projectId: string]: boolean }>({});
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    if (user) {
+      fetchProjects();
+      fetchTasks();
+    }
+  }, [user]);
+
+  const fetchTasks = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch('/api/tasks', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        setTasks(data.tasks || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch tasks:', err);
+    }
+  };
 
   const fetchProjects = async () => {
+    if (!user) return;
+    
     try {
       setLoading(true);
-      const testUserId = '00000000-0000-0000-0000-000000000001';
-      const response = await fetch(`/api/projects?userId=${testUserId}`); // TODO: Get from Supabase auth
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No session found');
+      }
+
+      const response = await fetch('/api/projects', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
       const data = await response.json();
 
       if (!response.ok) {
@@ -50,7 +99,12 @@ export default function DashboardPage() {
       const projectsWithSnapshots = await Promise.all(
         projectsList.map(async (project): Promise<ProjectWithSnapshots> => {
           try {
-            const snapshotsResponse = await fetch(`/api/snapshots?projectId=${project.id}`);
+            const { data: { session } } = await supabase.auth.getSession();
+            const snapshotsResponse = await fetch(`/api/snapshots?projectId=${project.id}`, {
+              headers: session ? {
+                'Authorization': `Bearer ${session.access_token}`,
+              } : {},
+            });
             const snapshotsData = await snapshotsResponse.json();
             const snapshots: Snapshot[] = snapshotsData.snapshots || [];
             const latestSnapshot = snapshots[0] ?? null;
@@ -89,21 +143,21 @@ export default function DashboardPage() {
   };
 
   const handleGenerateArchitecture = async (projectId: string) => {
-    const githubToken = sessionStorage.getItem('githubToken');
-    
-    if (!githubToken) {
-      setError('GitHub token not found. Please reconnect your repository.');
-      return;
-    }
-
     try {
       setGenerating(prev => ({ ...prev, [projectId]: true }));
       setError(null);
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No session found');
+      }
+
       const response = await fetch(`/api/projects/${projectId}/generate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ githubToken }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
       });
 
       const data = await response.json();
@@ -137,9 +191,17 @@ export default function DashboardPage() {
       setDeleting(prev => ({ ...prev, [projectId]: true }));
       setError(null);
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No session found');
+      }
+
       const response = await fetch(`/api/projects/${projectId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
       });
       const data = await response.json().catch(() => ({}));
 
@@ -158,7 +220,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto">
+        <div className="max-w-7xl mx-auto">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
             <p className="mt-4 text-gray-600">Loading your projects...</p>
@@ -170,10 +232,22 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-          <p className="text-gray-600">Manage your connected GitHub repositories</p>
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+            <p className="text-gray-600">Manage your connected GitHub repositories</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-600">{user?.email}</span>
+            <Button
+              appName="web"
+              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+              onClick={signOut}
+            >
+              Sign Out
+            </Button>
+          </div>
         </div>
 
         {error && (
@@ -325,9 +399,70 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+
+            {/* Tasks Section */}
+            {tasks.length > 0 && (
+              <div className="mt-12">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  Generated Tasks ({tasks.length})
+                </h2>
+                <div className="bg-white shadow rounded-lg overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Task
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Project
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Created
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {tasks.map((task) => (
+                        <tr key={task.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <div className="text-sm font-medium text-gray-900">{task.title}</div>
+                            <div className="text-sm text-gray-500 truncate max-w-md">{task.description}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-600">{task.project_name}</span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {formatDate(task.created_at)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button
+                              onClick={() => window.location.href = `/task/${task.id}`}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }
