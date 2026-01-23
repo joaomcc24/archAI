@@ -11,6 +11,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    setMousePosition({ x, y });
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,34 +63,65 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-white flex">
       {/* Left side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 bg-slate-900 p-12 flex-col justify-between">
-        <div>
+      <div 
+        className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-12 flex-col relative overflow-hidden"
+        onMouseMove={handleMouseMove}
+      >
+        {/* Background decoration - moves with mouse */}
+        <div className="absolute inset-0 opacity-40 pointer-events-none">
+          <div 
+            className="absolute w-72 h-72 bg-blue-500/30 rounded-full blur-3xl"
+            style={{ 
+              top: '80px',
+              right: '80px',
+              transform: `translate(${mousePosition.x * -50}px, ${mousePosition.y * -50}px)`,
+              transition: 'transform 0.15s ease-out'
+            }}
+          ></div>
+          <div 
+            className="absolute w-96 h-96 bg-emerald-500/25 rounded-full blur-3xl"
+            style={{ 
+              bottom: '160px',
+              left: '80px',
+              transform: `translate(${mousePosition.x * 70}px, ${mousePosition.y * 70}px)`,
+              transition: 'transform 0.15s ease-out'
+            }}
+          ></div>
+          <div 
+            className="absolute w-64 h-64 bg-purple-500/25 rounded-full blur-3xl"
+            style={{ 
+              top: '50%',
+              left: '50%',
+              transform: `translate(calc(-50% + ${mousePosition.x * -40}px), calc(-50% + ${mousePosition.y * -40}px))`,
+              transition: 'transform 0.2s ease-out'
+            }}
+          ></div>
+        </div>
+        
+        {/* Logo */}
+        <div className="relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-              </svg>
-            </div>
+            <img src="/favicon.ico" alt="RepoLens" className="w-10 h-10" />
             <span className="font-semibold text-white text-xl">RepoLens</span>
           </Link>
         </div>
-        
-        <div>
-          <blockquote className="text-xl text-white/90 font-medium leading-relaxed">
-            "RepoLens saved us hours of onboarding time. New developers can understand our codebase in minutes instead of days."
-          </blockquote>
-          <div className="mt-6 flex items-center gap-4">
-            <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center text-white font-medium">
-              JD
-            </div>
-            <div>
-              <p className="text-white font-medium">João Developer</p>
-              <p className="text-white/60 text-sm">Senior Engineer at TechCo</p>
-            </div>
+
+        {/* Center content - minimal */}
+        <div className="flex-1 flex flex-col justify-center items-center text-center relative z-10">
+          <div className="max-w-md">
+            <h2 className="text-4xl font-bold text-white leading-tight mb-6">
+              Good to see you again
+            </h2>
+            <p className="text-xl text-white/60">
+              Your repositories are waiting.
+            </p>
           </div>
         </div>
 
-        <p className="text-white/40 text-sm">© 2026 RepoLens. All rights reserved.</p>
+        {/* Footer */}
+        <div className="relative z-10 text-center">
+          <p className="text-white/40 text-sm">© 2026 RepoLens. All rights reserved.</p>
+        </div>
       </div>
 
       {/* Right side - Form */}
@@ -91,11 +130,7 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="lg:hidden mb-8">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                </svg>
-              </div>
+              <img src="/favicon.ico" alt="RepoLens" className="w-8 h-8" />
               <span className="font-semibold text-slate-900">RepoLens</span>
             </Link>
           </div>
