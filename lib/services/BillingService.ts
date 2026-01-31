@@ -1,13 +1,14 @@
 import Stripe from 'stripe';
 import { supabaseAdmin as supabase } from '../supabase-server';
 import { PLANS, SubscriptionPlan } from '../plans';
+import { appendFileSync } from 'fs';
 
 // Lazy initialize Stripe to avoid build-time errors
 let stripeInstance: Stripe | null = null;
 function getStripe(): Stripe {
   if (!stripeInstance) {
     stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-      apiVersion: '2025-12-18.acacia' as Stripe.LatestApiVersion,
+      apiVersion: '2023-10-16' as Stripe.LatestApiVersion,
     });
   }
   return stripeInstance;
@@ -91,13 +92,24 @@ export class BillingService {
     status: string;
     currentPeriodEnd: Date | null;
   }> {
+    // #region agent log
+    try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:89',message:'Getting subscription',data:{userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
+    // #endregion
+
     const { data: subscription } = await supabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
       .single();
 
+    // #region agent log
+    try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:96',message:'Subscription query result',data:{hasSubscription:!!subscription,status:subscription?.status,planId:subscription?.plan_id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
+    // #endregion
+
     if (!subscription || subscription.status !== 'active') {
+      // #region agent log
+      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:100',message:'Returning free plan',data:{planId:'free',limits:PLANS.free.limits},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
+      // #endregion
       return {
         plan: PLANS.free,
         status: 'free',
@@ -106,6 +118,10 @@ export class BillingService {
     }
 
     const plan = PLANS[subscription.plan_id] || PLANS.free;
+
+    // #region agent log
+    try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:110',message:'Returning subscription plan',data:{planId:plan.id,limits:plan.limits},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
+    // #endregion
 
     return {
       plan,
@@ -221,20 +237,39 @@ export class BillingService {
     userId: string,
     limitType: 'repos' | 'snapshots' | 'tasks'
   ): Promise<{ allowed: boolean; current: number; limit: number }> {
+    // #region agent log
+    try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:220',message:'checkLimit entry',data:{userId,limitType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})+'\n');}catch(e){}
+    // #endregion
+
     const { plan } = await this.getSubscription(userId);
     const limit = plan.limits[limitType];
 
+    // #region agent log
+    try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:225',message:'Plan and limit determined',data:{planId:plan.id,limit,limitType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
+    // #endregion
+
     if (limit === -1) {
+      // #region agent log
+      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:228',message:'Unlimited limit - returning allowed',data:{limitType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');}catch(e){}
+      // #endregion
       return { allowed: true, current: 0, limit: -1 };
     }
 
     let current = 0;
 
     if (limitType === 'repos') {
-      const { count } = await supabase
+      // #region agent log
+      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:233',message:'Querying projects count',data:{userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n');}catch(e){}
+      // #endregion
+      const { count, error } = await supabase
         .from('projects')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId);
+      
+      // #region agent log
+      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:238',message:'Projects count result',data:{count:count||0,error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n');}catch(e){}
+      // #endregion
+      
       current = count || 0;
     } else if (limitType === 'snapshots') {
       const startOfMonth = new Date();
@@ -260,8 +295,14 @@ export class BillingService {
       current = count || 0;
     }
 
+    const allowed = current < limit;
+    
+    // #region agent log
+    try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:263',message:'checkLimit result',data:{allowed,current,limit,comparison:`${current} < ${limit} = ${allowed}`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,E'})+'\n');}catch(e){}
+    // #endregion
+
     return {
-      allowed: current < limit,
+      allowed,
       current,
       limit,
     };

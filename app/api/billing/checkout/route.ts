@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/auth';
 import { billingService } from '@/lib/services/BillingService';
+import { trackServerEvent, AnalyticsEvents } from '@/lib/analytics-server';
+import { validateRequestBody, checkoutSchema, formatZodError } from '@/lib/validation';
+import { formatErrorResponse, ValidationError } from '@/lib/errors';
+import '@/lib/env-validation'; // Validate env vars on module load
 
 // POST /api/billing/checkout - Create checkout session
 export async function POST(request: NextRequest) {
@@ -8,11 +12,15 @@ export async function POST(request: NextRequest) {
     const auth = await authenticateRequest(request);
     if ('error' in auth) return auth.error;
 
-    const { priceId } = await request.json();
-
-    if (!priceId) {
-      return NextResponse.json({ error: 'Price ID is required' }, { status: 400 });
+    // Validate request body
+    const validation = await validateRequestBody(request, checkoutSchema);
+    if (!validation.success) {
+      const zodError = formatZodError(validation.error);
+      const error = new ValidationError(zodError.error, zodError.fields);
+      return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
     }
+
+    const { priceId } = validation.data;
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const successUrl = `${baseUrl}/billing?success=true`;
@@ -25,6 +33,11 @@ export async function POST(request: NextRequest) {
       successUrl,
       cancelUrl
     );
+
+    // Track analytics event
+    await trackServerEvent(AnalyticsEvents.CHECKOUT_STARTED, {
+      price_id: priceId,
+    }, auth.user.id);
 
     return NextResponse.json({ url: checkoutUrl });
   } catch (error) {

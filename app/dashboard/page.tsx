@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { useAuth } from "../../contexts/AuthContext";
 import { ProtectedRoute } from "../../components/ProtectedRoute";
 import { supabase } from "../../lib/supabase";
+import { trackEvent, AnalyticsEvents } from "../../lib/analytics";
+import { DriftScore } from "@/components/DriftScore";
 
 interface Project {
   id: string;
@@ -32,9 +34,16 @@ interface Task {
   project_name?: string;
 }
 
+interface DriftResult {
+  id: string;
+  drift_score: number;
+  created_at: string;
+}
+
 interface ProjectWithSnapshots extends Project {
   latestSnapshot: Snapshot | null;
   snapshotCount: number;
+  latestDrift?: DriftResult | null;
 }
 
 function DashboardContent() {
@@ -109,16 +118,36 @@ function DashboardContent() {
             const snapshots: Snapshot[] = snapshotsData.snapshots || [];
             const latestSnapshot = snapshots[0] ?? null;
 
+            // Fetch latest drift result
+            let latestDrift: DriftResult | null = null;
+            try {
+              const driftResponse = await fetch(`/api/projects/${project.id}/drift`, {
+                headers: session ? {
+                  'Authorization': `Bearer ${session.access_token}`,
+                } : {},
+              });
+              if (driftResponse.ok) {
+                const driftData = await driftResponse.json();
+                if (driftData.drift_results && driftData.drift_results.length > 0) {
+                  latestDrift = driftData.drift_results[0];
+                }
+              }
+            } catch {
+              // Ignore drift fetch errors
+            }
+
             return {
               ...project,
               latestSnapshot,
               snapshotCount: snapshots.length,
+              latestDrift,
             };
           } catch {
             return {
               ...project,
               latestSnapshot: null,
               snapshotCount: 0,
+              latestDrift: null,
             };
           }
         })
@@ -210,6 +239,11 @@ function DashboardContent() {
       }
 
       setProjects(prev => prev.filter(project => project.id !== projectId));
+
+      // Track project deletion
+      trackEvent(AnalyticsEvents.PROJECT_DELETED, {
+        project_id: projectId,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete project');
     } finally {
@@ -231,35 +265,53 @@ function DashboardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-            <p className="text-gray-600">Manage your connected GitHub repositories</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{user?.email}</span>
-            <Button
-              className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
-              onClick={signOut}
-            >
-              Sign Out
-            </Button>
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+              <p className="text-gray-600 mt-1">Manage your connected GitHub repositories</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <a
+                href="/analytics"
+                className="px-4 py-2 bg-slate-800 rounded-lg text-sm font-medium text-white hover:bg-slate-700 transition-colors inline-flex items-center gap-2 shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Analytics
+              </a>
+              <a
+                href="/billing"
+                className="px-4 py-2 bg-slate-800 rounded-lg text-sm font-medium text-white hover:bg-slate-700 transition-colors shadow-sm"
+              >
+                Billing
+              </a>
+              <span className="text-sm text-gray-600 px-3 py-2 bg-white rounded-lg border border-gray-200">{user?.email}</span>
+              <Button
+                className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-700 shadow-sm"
+                onClick={signOut}
+              >
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
             <p className="text-sm text-red-600">{error}</p>
           </div>
         )}
 
         {projects.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center shadow-sm">
+            <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl flex items-center justify-center mb-6">
               <svg
-                className="w-8 h-8 text-gray-400"
+                className="w-10 h-10 text-blue-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -272,27 +324,30 @@ function DashboardContent() {
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">
               No repositories connected
             </h2>
-            <p className="text-gray-600 mb-6">
+            <p className="text-gray-600 mb-8 max-w-md mx-auto">
               Connect your first GitHub repository to get started with architecture documentation
             </p>
             <Button
-              className="bg-blue-600 text-white px-6 py-3 rounded-md font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="bg-blue-600 text-white px-8 py-3 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-sm"
               onClick={() => window.location.href = '/connect'}
             >
               Connect Repository
             </Button>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Connected Repositories ({projects.length})
-              </h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Connected Repositories
+                </h2>
+                <p className="text-gray-600 mt-1">{projects.length} {projects.length === 1 ? 'repository' : 'repositories'}</p>
+              </div>
               <Button
-                className="bg-blue-600 text-white px-4 py-2 rounded-md font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-sm"
                 onClick={() => window.location.href = '/connect'}
               >
                 Connect Another
@@ -303,13 +358,13 @@ function DashboardContent() {
               {projects.map((project) => (
                 <div
                   key={project.id}
-                  className="bg-white shadow rounded-lg p-6 hover:shadow-md transition-shadow"
+                  className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 shadow-sm"
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mr-3">
+                  <div className="flex items-start justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl">
                         <svg
-                          className="w-5 h-5 text-gray-400"
+                          className="w-6 h-6 text-gray-700"
                           fill="currentColor"
                           viewBox="0 0 20 20"
                         >
@@ -321,37 +376,43 @@ function DashboardContent() {
                         </svg>
                       </div>
                       <div>
-                        <h3 className="font-medium text-gray-900">{project.repo_name}</h3>
+                        <h3 className="font-semibold text-gray-900 text-lg">{project.repo_name}</h3>
                         <p className="text-sm text-gray-500">GitHub Repository</p>
                       </div>
                     </div>
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                       Connected
                     </span>
                   </div>
 
-                  <div className="mb-4">
-                    <p className="text-sm text-gray-600">
-                      Connected on {formatDate(project.created_at)}
-                    </p>
+                  <div className="mb-6 space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span>Connected {formatDate(project.created_at)}</span>
+                    </div>
                     {project.snapshotCount > 0 && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        {project.snapshotCount} snapshot{project.snapshotCount !== 1 ? 's' : ''} available
-                      </p>
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        </svg>
+                        <span>{project.snapshotCount} snapshot{project.snapshotCount !== 1 ? 's' : ''} available</span>
+                      </div>
                     )}
                   </div>
 
                   {project.latestSnapshot && (
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="mb-4 p-4 bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-blue-900">Latest Architecture</p>
-                          <p className="text-xs text-blue-600">
+                          <p className="text-sm font-semibold text-blue-900">Latest Architecture</p>
+                          <p className="text-xs text-blue-700 mt-0.5">
                             {formatDate(project.latestSnapshot.created_at)}
                           </p>
                         </div>
                         <Button
-                          className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-medium hover:bg-blue-700"
+                          className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 shadow-sm"
                           onClick={() => {
                             window.location.href = `/snapshot/${project.latestSnapshot!.id}`;
                           }}
@@ -362,27 +423,54 @@ function DashboardContent() {
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <div className="flex space-x-2">
+                  {project.latestDrift && (
+                    <div className="mb-4 p-4 bg-gradient-to-br from-amber-50 to-yellow-50 border border-amber-200 rounded-xl">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-amber-900">Latest Drift</p>
+                          <p className="text-xs text-amber-700 mt-0.5">
+                            {formatDate(project.latestDrift.created_at)}
+                          </p>
+                        </div>
+                        <DriftScore score={project.latestDrift.drift_score} size="sm" />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2.5 pt-4 border-t border-gray-100">
+                    <div className="flex gap-2">
                       <Button
-                        className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex-1 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                         onClick={() => handleGenerateArchitecture(project.id)}
                         disabled={generating[project.id] || deleting[project.id]}
                       >
                         {generating[project.id] ? 'Generating...' : 'Generate Architecture'}
                       </Button>
                       <Button
-                        className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 shadow-sm border border-gray-200"
                         onClick={() => {
                           window.open(`https://github.com/${project.repo_name}`, '_blank');
                         }}
                         disabled={deleting[project.id]}
                       >
-                        View on GitHub
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
                       </Button>
                     </div>
+                    {project.snapshotCount > 0 && (
+                      <Button
+                        className="w-full bg-purple-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        onClick={() => {
+                          window.location.href = `/projects/${project.id}/drift`;
+                        }}
+                        disabled={deleting[project.id]}
+                      >
+                        Detect Drift
+                      </Button>
+                    )}
                     <Button
-                      className="w-full bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                       onClick={() => handleDeleteProject(project.id)}
                       disabled={deleting[project.id]}
                     >
@@ -396,52 +484,66 @@ function DashboardContent() {
             {/* Tasks Section */}
             {tasks.length > 0 && (
               <div className="mt-12">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                  Generated Tasks ({tasks.length})
-                </h2>
-                <div className="bg-white shadow rounded-lg overflow-hidden">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Task
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Project
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Created
-                        </th>
-                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {tasks.map((task) => (
-                        <tr key={task.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4">
-                            <div className="text-sm font-medium text-gray-900">{task.title}</div>
-                            <div className="text-sm text-gray-500 truncate max-w-md">{task.description}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="text-sm text-gray-600">{task.project_name}</span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {formatDate(task.created_at)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <button
-                              onClick={() => window.location.href = `/task/${task.id}`}
-                              className="text-blue-600 hover:text-blue-900"
-                            >
-                              View
-                            </button>
-                          </td>
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Generated Tasks
+                  </h2>
+                  <p className="text-gray-600 mt-1">{tasks.length} {tasks.length === 1 ? 'task' : 'tasks'} generated</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Task
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Project
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Created
+                          </th>
+                          <th className="px-6 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                            Actions
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-100">
+                        {tasks.map((task) => (
+                          <tr key={task.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 bg-green-50 rounded-lg">
+                                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                  </svg>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">{task.title}</div>
+                                  <div className="text-sm text-gray-500 truncate max-w-md">{task.description}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className="text-sm text-gray-600 font-medium">{task.project_name}</span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {formatDate(task.created_at)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <button
+                                onClick={() => window.location.href = `/task/${task.id}`}
+                                className="text-blue-600 hover:text-blue-700 font-medium"
+                              >
+                                View →
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}

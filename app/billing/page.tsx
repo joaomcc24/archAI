@@ -61,7 +61,7 @@ function BillingPageContent() {
       <div className="max-w-6xl mx-auto px-4 py-12">
         {/* Header */}
         <div className="mb-8">
-          <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 mb-4 inline-block">
+          <Link href="/dashboard" className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-700 mb-4 transition-colors font-medium text-sm">
             ← Back to Dashboard
           </Link>
           <h1 className="text-3xl font-bold text-gray-900">Billing & Subscription</h1>

@@ -1,23 +1,36 @@
 import { supabaseAdmin as supabase } from '../supabase-server';
+import { RepoFile } from './RepoParserService';
 
 export interface Snapshot {
   id: string;
   project_id: string;
   markdown: string;
+  repo_structure?: RepoFile | null;
   created_at: string;
 }
 
 export class SnapshotService {
   static async createSnapshot(
     projectId: string,
-    markdown: string
+    markdown: string,
+    repoStructure?: RepoFile
   ): Promise<Snapshot> {
+    const insertData: {
+      project_id: string;
+      markdown: string;
+      repo_structure?: Record<string, unknown>;
+    } = {
+      project_id: projectId,
+      markdown,
+    };
+
+    if (repoStructure) {
+      insertData.repo_structure = repoStructure as unknown as Record<string, unknown>;
+    }
+
     const { data, error } = await supabase
       .from('snapshots')
-      .insert({
-        project_id: projectId,
-        markdown,
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -25,7 +38,10 @@ export class SnapshotService {
       throw new Error(`Failed to create snapshot: ${error.message}`);
     }
 
-    return data;
+    return {
+      ...data,
+      repo_structure: data.repo_structure as unknown as RepoFile | null,
+    };
   }
 
   static async getSnapshotsByProjectId(projectId: string): Promise<Snapshot[]> {

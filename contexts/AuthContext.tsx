@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { trackEvent, identifyUser, AnalyticsEvents } from '../lib/analytics';
 
 interface AuthContextType {
   user: User | null;
@@ -34,16 +35,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+
+      // Track auth events
+      if (session?.user) {
+        identifyUser(session.user.id, {
+          email: session.user.email,
+        });
+
+        if (event === 'SIGNED_IN') {
+          trackEvent(AnalyticsEvents.SIGNED_IN, {
+            method: 'password', // Could be enhanced to detect OAuth
+          });
+        } else if (event === 'SIGNED_UP') {
+          trackEvent(AnalyticsEvents.SIGNED_UP, {
+            email: session.user.email,
+          });
+        }
+      } else if (event === 'SIGNED_OUT') {
+        trackEvent(AnalyticsEvents.SIGNED_OUT);
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
   const signOut = async () => {
+    trackEvent(AnalyticsEvents.SIGNED_OUT);
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);

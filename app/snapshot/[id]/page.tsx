@@ -7,6 +7,8 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "../../../components/ProtectedRoute";
 import { supabase } from "../../../lib/supabase";
+import { trackEvent, AnalyticsEvents } from "../../../lib/analytics";
+import { useBilling } from "../../../contexts/BillingContext";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const CodeHighlighter = SyntaxHighlighter as React.ComponentType<any>;
@@ -86,6 +88,7 @@ function CloseIcon({ className }: { className?: string }) {
 }
 
 function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
+  const { subscription } = useBilling();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +97,8 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedCodeBlock, setCopiedCodeBlock] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [detectingDrift, setDetectingDrift] = useState(false);
   
   // Task generation state
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -101,6 +106,8 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
   const [generatingTask, setGeneratingTask] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [snapshotTasks, setSnapshotTasks] = useState<Task[]>([]);
+  
+  const isProUser = subscription?.plan?.id === 'pro' || subscription?.plan?.id === 'team';
 
   useEffect(() => {
     params.then((resolvedParams) => {
@@ -126,6 +133,12 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
       }
 
       setSnapshot(data.snapshot);
+
+      // Track snapshot viewed
+      trackEvent(AnalyticsEvents.SNAPSHOT_VIEWED, {
+        snapshot_id: snapshotId,
+        project_id: data.snapshot?.project_id,
+      });
 
       // Fetch project info for regeneration
       if (data.snapshot?.project_id) {
@@ -173,6 +186,92 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleExportPdf = async () => {
+    if (!snapshot || !isProUser) return;
+
+    try {
+      setExportingPdf(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(`/api/snapshots/${snapshot.id}/export-pdf`, {
+        method: 'POST',
+        headers: session ? {
+          'Authorization': `Bearer ${session.access_token}`,
+        } : {},
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to export PDF');
+      }
+
+      const data = await response.json();
+      
+      // Convert markdown to HTML then to PDF using browser APIs
+      const { marked } = await import('marked');
+      const html = await marked.parse(data.markdown);
+      
+      // Create a temporary element to render HTML
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = html;
+      tempDiv.style.position = 'absolute';
+      tempDiv.style.left = '-9999px';
+      tempDiv.style.width = '210mm'; // A4 width
+      tempDiv.style.padding = '20mm';
+      tempDiv.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+      tempDiv.style.fontSize = '12pt';
+      tempDiv.style.lineHeight = '1.6';
+      tempDiv.style.color = '#000';
+      document.body.appendChild(tempDiv);
+
+      // Use html2canvas to convert to image, then jsPDF to create PDF
+      const { default: html2canvas } = await import('html2canvas');
+      const { default: jsPDF } = await import('jspdf');
+      
+      const canvas = await html2canvas(tempDiv, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const fileName = project 
+        ? `${project.repo_name.replace('/', '-')}-architecture.pdf`
+        : `architecture-${snapshot.id}.pdf`;
+      
+      pdf.save(fileName);
+      
+      // Cleanup
+      document.body.removeChild(tempDiv);
+      
+      trackEvent(AnalyticsEvents.SNAPSHOT_VIEWED, {
+        snapshot_id: snapshot.id,
+        action: 'pdf_export',
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export PDF');
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const handleCopyAll = async () => {
@@ -264,6 +363,36 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
     }
   };
 
+  const handleCompareWithCurrent = async () => {
+    if (!project) return;
+
+    try {
+      setDetectingDrift(true);
+      setError(null);
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(`/api/projects/${project.id}/drift`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to detect drift');
+      }
+
+      // Redirect to drift page
+      window.location.href = `/projects/${project.id}/drift`;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to compare with current');
+      setDetectingDrift(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -343,16 +472,44 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                 <span>Download</span>
               </button>
 
-              {project && (
+              {isProUser && (
                 <button
-                  onClick={handleRegenerate}
-                  disabled={regenerating}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Regenerate architecture documentation"
+                  onClick={handleExportPdf}
+                  disabled={exportingPdf}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Export as PDF (Pro feature)"
                 >
-                  <RefreshIcon className={`w-5 h-5 ${regenerating ? 'animate-spin' : ''}`} />
-                  <span>{regenerating ? 'Regenerating...' : 'Regenerate'}</span>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <span>{exportingPdf ? 'Exporting...' : 'Export PDF'}</span>
                 </button>
+              )}
+
+              {project && (
+                <>
+                  <button
+                    onClick={handleRegenerate}
+                    disabled={regenerating}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Regenerate architecture documentation"
+                  >
+                    <RefreshIcon className={`w-5 h-5 ${regenerating ? 'animate-spin' : ''}`} />
+                    <span>{regenerating ? 'Regenerating...' : 'Regenerate'}</span>
+                  </button>
+                  
+                  <button
+                    onClick={handleCompareWithCurrent}
+                    disabled={detectingDrift}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Compare this snapshot with current repository state"
+                  >
+                    <svg className={`w-5 h-5 ${detectingDrift ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <span>{detectingDrift ? 'Detecting...' : 'Compare with Current'}</span>
+                  </button>
+                </>
               )}
 
               <button

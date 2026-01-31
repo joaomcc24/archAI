@@ -7,6 +7,7 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Button } from "@/components/ui/Button";
 import { ProtectedRoute } from "../../../components/ProtectedRoute";
 import { supabase } from "../../../lib/supabase";
+import { trackEvent, AnalyticsEvents } from "../../../lib/analytics";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const CodeHighlighter = SyntaxHighlighter as React.ComponentType<any>;
@@ -99,6 +100,15 @@ function TaskPageContent({ params }: { params: Promise<{ id: string }> }) {
       }
 
       setTask(data.task);
+
+      // Track task viewed
+      if (data.task) {
+        trackEvent(AnalyticsEvents.TASK_VIEWED, {
+          task_id: taskId,
+          project_id: data.task.project_id,
+          snapshot_id: data.task.snapshot_id,
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
