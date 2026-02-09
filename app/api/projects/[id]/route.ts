@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
+import { checkProjectAccess, checkProjectOwner } from '@/lib/auth-project';
 import { ProjectService } from '@/lib/services/ProjectService';
 import { SnapshotService } from '@/lib/services/SnapshotService';
+import { NotFoundError } from '@/lib/errors';
+import { formatErrorResponse } from '@/lib/errors';
 
 // GET /api/projects/[id] - Get a single project
 export async function GET(
@@ -9,18 +11,19 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
-
     const { id } = await params;
+    
+    // Require at least viewer access
+    const access = await checkProjectAccess(request, id, 'viewer');
+    if ('error' in access) {
+      return access.error;
+    }
+
     const project = await ProjectService.getProjectById(id);
 
     if (!project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-    }
-
-    if (project.user_id !== auth.user.id) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+      const error = new NotFoundError('Project');
+      return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
     }
 
     // Don't return github_token in response
@@ -29,11 +32,8 @@ export async function GET(
   } catch (error) {
     console.error('Error fetching project:', error);
     return NextResponse.json(
-      {
-        error: 'Failed to fetch project',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
+      formatErrorResponse(error),
+      { status: error instanceof Error && 'statusCode' in error ? (error as any).statusCode : 500 }
     );
   }
 }
@@ -44,18 +44,19 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
-
     const { id } = await params;
+    
+    // Require owner access
+    const owner = await checkProjectOwner(request, id);
+    if ('error' in owner) {
+      return owner.error;
+    }
+
     const project = await ProjectService.getProjectById(id);
 
     if (!project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-    }
-
-    if (project.user_id !== auth.user.id) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+      const error = new NotFoundError('Project');
+      return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
     }
 
     await SnapshotService.deleteSnapshotsByProjectId(id);
@@ -65,11 +66,8 @@ export async function DELETE(
   } catch (error) {
     console.error('Error deleting project:', error);
     return NextResponse.json(
-      {
-        error: 'Failed to delete project',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 }
+      formatErrorResponse(error),
+      { status: error instanceof Error && 'statusCode' in error ? (error as any).statusCode : 500 }
     );
   }
 }

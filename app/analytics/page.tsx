@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { AppTopBar } from '../../components/AppTopBar';
 import { useAuth } from '../../contexts/AuthContext';
 import { ProtectedRoute } from '../../components/ProtectedRoute';
 import { supabase } from '../../lib/supabase';
@@ -26,6 +27,8 @@ interface Stats {
   projectsChange: number;
   snapshotsChange: number;
   tasksChange: number;
+  sharedProjects: number;
+  totalMembers: number;
 }
 
 interface ActivityData {
@@ -116,15 +119,61 @@ function AnalyticsContent() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      // Fetch projects
-      const { data: projects, error: projectsError } = await supabase
+      // Fetch owned projects
+      const { data: ownedProjects, error: projectsError } = await supabase
         .from('projects')
         .select('*')
         .eq('user_id', user.id);
 
       if (projectsError) throw projectsError;
 
-      const projectIds = projects?.map(p => p.id) || [];
+      // Fetch shared projects via project_members
+      let sharedProjectIds: string[] = [];
+      let totalMembers = 0;
+      try {
+        const { data: memberships } = await supabase
+          .from('project_members')
+          .select('project_id, role')
+          .eq('user_id', user.id)
+          .neq('role', 'owner');
+
+        if (memberships && memberships.length > 0) {
+          sharedProjectIds = memberships.map(m => m.project_id);
+        }
+
+        // Count total unique members across owned projects
+        const ownedIds = ownedProjects?.map(p => p.id) || [];
+        if (ownedIds.length > 0) {
+          const { data: allMembers } = await supabase
+            .from('project_members')
+            .select('user_id, project_id')
+            .in('project_id', ownedIds);
+          
+          if (allMembers) {
+            const uniqueMembers = new Set(allMembers.map(m => m.user_id));
+            totalMembers = uniqueMembers.size;
+          }
+        }
+      } catch {
+        // project_members table may not exist yet
+      }
+
+      // Merge owned + shared projects
+      let sharedProjects: typeof ownedProjects = [];
+      if (sharedProjectIds.length > 0) {
+        const { data: shared } = await supabase
+          .from('projects')
+          .select('*')
+          .in('id', sharedProjectIds);
+        sharedProjects = shared || [];
+      }
+
+      const projects = [
+        ...(ownedProjects || []),
+        ...(sharedProjects || []).filter(sp => !ownedProjects?.some(op => op.id === sp.id)),
+      ];
+
+      const projectIds = projects.map(p => p.id);
 
       // Fetch all snapshots
       const { data: snapshots, error: snapshotsError } = await supabase
@@ -176,7 +225,7 @@ function AnalyticsContent() {
         : tasksThisMonth > 0 ? 100 : 0;
 
       setStats({
-        totalProjects: projects?.length || 0,
+        totalProjects: projects.length,
         totalSnapshots: snapshots?.length || 0,
         totalTasks: tasks?.length || 0,
         snapshotsThisMonth,
@@ -184,6 +233,8 @@ function AnalyticsContent() {
         projectsChange: 0,
         snapshotsChange,
         tasksChange,
+        sharedProjects: sharedProjectIds.length,
+        totalMembers,
       });
 
       // Generate activity data for chart
@@ -283,8 +334,9 @@ function AnalyticsContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+      <div className="dashboard min-h-screen bg-gray-50">
+        <AppTopBar />
+        <div className="flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 min-h-[calc(100vh-4rem)]">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
             <p className="mt-4 text-gray-600">Loading analytics...</p>
@@ -295,17 +347,11 @@ function AnalyticsContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="dashboard min-h-screen bg-gray-50">
+      <AppTopBar />
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <Link 
-            href="/dashboard" 
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-700 mb-4 transition-colors font-medium text-sm"
-          >
-            <BackIcon className="w-4 h-4" />
-            <span>Back to Dashboard</span>
-          </Link>
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
@@ -555,43 +601,32 @@ function AnalyticsContent() {
             )}
           </div>
 
-          {/* Team Collaboration - Coming Soon */}
-          <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border border-gray-200 p-6 shadow-sm relative overflow-hidden">
-            <div className="absolute top-4 right-4">
-              <span className="px-3 py-1 bg-slate-800 text-white text-xs font-medium rounded-full">
-                Coming Soon
-              </span>
-            </div>
+          {/* Team Collaboration Stats */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
             <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-white rounded-xl shadow-sm">
-                <UsersIcon className="w-6 h-6 text-gray-400" />
+              <div className="p-3 bg-purple-50 rounded-xl">
+                <UsersIcon className="w-6 h-6 text-purple-600" />
               </div>
               <h2 className="text-lg font-semibold text-gray-900">Team Collaboration</h2>
             </div>
             <p className="text-gray-600 mb-6">
-              Invite team members, share architecture snapshots, and collaborate on implementation tasks.
+              Share projects with team members and collaborate on architecture documentation.
             </p>
             <div className="space-y-3">
-              <div className="flex items-center gap-3 p-3 bg-white/60 rounded-lg">
-                <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse"></div>
-                <div className="flex-1">
-                  <div className="h-4 bg-gray-200 rounded w-32 mb-1 animate-pulse"></div>
-                  <div className="h-3 bg-gray-100 rounded w-24 animate-pulse"></div>
-                </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="text-sm text-gray-600">Shared Projects</span>
+                <span className="text-sm font-semibold text-gray-900">{stats?.sharedProjects || 0}</span>
               </div>
-              <div className="flex items-center gap-3 p-3 bg-white/60 rounded-lg">
-                <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse"></div>
-                <div className="flex-1">
-                  <div className="h-4 bg-gray-200 rounded w-28 mb-1 animate-pulse"></div>
-                  <div className="h-3 bg-gray-100 rounded w-20 animate-pulse"></div>
-                </div>
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="text-sm text-gray-600">Team Members</span>
+                <span className="text-sm font-semibold text-gray-900">{stats?.totalMembers || 0}</span>
               </div>
-              <button 
-                disabled
-                className="w-full mt-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-400 text-sm font-medium cursor-not-allowed"
+              <Link
+                href="/dashboard"
+                className="block w-full mt-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 text-sm font-medium text-center hover:border-purple-400 hover:text-purple-600 transition-colors"
               >
-                + Add Member
-              </button>
+                Manage Projects
+              </Link>
             </div>
           </div>
         </div>

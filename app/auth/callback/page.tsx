@@ -17,8 +17,13 @@ function AuthCallbackContent() {
     const errorCode = searchParams.get('error_code');
     
     if (errorDescription) {
-      console.error('OAuth error:', errorDescription, errorCode);
-      setError(decodeURIComponent(errorDescription));
+      console.warn('OAuth error:', errorDescription, errorCode);
+      const decoded = decodeURIComponent(errorDescription);
+      const hint =
+        errorCode === 'unexpected_failure'
+          ? 'GitHub did not return a usable profile. Please try again or re-authorize GitHub.'
+          : '';
+      setError(hint ? `${decoded}\n${hint}` : decoded);
       return;
     }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
 import { SnapshotService } from '@/lib/services/SnapshotService';
 import { ProjectService } from '@/lib/services/ProjectService';
+import { checkProjectAccess } from '@/lib/auth-project';
 
 // GET /api/snapshots/[id] - Get a single snapshot
 export async function GET(
@@ -9,9 +9,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
-
     const { id } = await params;
     const snapshot = await SnapshotService.getSnapshotById(id);
 
@@ -19,10 +16,13 @@ export async function GET(
       return NextResponse.json({ error: 'Snapshot not found' }, { status: 404 });
     }
 
-    // Verify project belongs to user
     const project = await ProjectService.getProjectById(snapshot.project_id);
-    if (!project || project.user_id !== auth.user.id) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    const access = await checkProjectAccess(request, project.id, 'viewer');
+    if ('error' in access) {
+      return access.error;
     }
 
     return NextResponse.json({ snapshot });

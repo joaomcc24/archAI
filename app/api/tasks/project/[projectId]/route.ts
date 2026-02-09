@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
 import { ProjectService } from '@/lib/services/ProjectService';
 import { supabaseAdmin } from '@/lib/supabase-server';
+import { checkProjectAccess } from '@/lib/auth-project';
 
 export interface Task {
   id: string;
@@ -19,19 +19,15 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
-
     const { projectId } = await params;
 
-    // Verify project ownership
     const project = await ProjectService.getProjectById(projectId);
     if (!project) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
-
-    if (project.user_id !== auth.user.id) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    const access = await checkProjectAccess(request, projectId, 'viewer');
+    if ('error' in access) {
+      return access.error;
     }
 
     const { data, error } = await supabaseAdmin

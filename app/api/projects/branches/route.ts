@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
 import { RepoParserService } from '@/lib/services/RepoParserService';
 
 // POST /api/projects/branches - Fetch branches for a repository
 export async function POST(request: NextRequest) {
   try {
-    const { repoName, githubToken } = await request.json();
+    const auth = await (await import('@/lib/auth')).authenticateRequest(request);
+    if ('error' in auth) return auth.error;
 
-    if (!repoName || !githubToken) {
+    const { repoName } = await request.json();
+    const githubToken = request.cookies.get('gh_token')?.value;
+
+    if (!repoName) {
       return NextResponse.json(
-        { error: 'Repository name and GitHub token are required' },
+        { error: 'Repository name is required' },
+        { status: 400 }
+      );
+    }
+    if (!githubToken) {
+      return NextResponse.json(
+        { error: 'GitHub token not found. Please reconnect your repository.' },
         { status: 400 }
       );
     }

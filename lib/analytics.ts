@@ -1,6 +1,7 @@
 import posthog from 'posthog-js';
 
 let initialized = false;
+const ANALYTICS_OPT_OUT_KEY = 'analytics-opt-out';
 
 export const initAnalytics = () => {
   if (typeof window === 'undefined') return;
@@ -18,6 +19,10 @@ export const initAnalytics = () => {
       if (process.env.NODE_ENV === 'development') {
         // Disable in development if you want
         // posthog.opt_out_capturing();
+      }
+      const optOut = window.localStorage.getItem(ANALYTICS_OPT_OUT_KEY) === 'true';
+      if (optOut) {
+        posthog.opt_out_capturing();
       }
     },
   });
@@ -38,6 +43,21 @@ export const trackEvent = (event: string, properties?: Record<string, unknown>) 
 export const resetAnalytics = () => {
   if (typeof window === 'undefined') return;
   posthog.reset();
+};
+
+export const setAnalyticsOptOut = (optOut: boolean) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ANALYTICS_OPT_OUT_KEY, optOut ? 'true' : 'false');
+  if (optOut) {
+    posthog.opt_out_capturing();
+  } else {
+    posthog.opt_in_capturing();
+  }
+};
+
+export const getAnalyticsOptOut = () => {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(ANALYTICS_OPT_OUT_KEY) === 'true';
 };
 
 // Pre-defined events for consistency
@@ -68,4 +88,7 @@ export const AnalyticsEvents = {
   
   // Pages
   PAGE_VIEWED: 'page_viewed',
+  
+  // Drift Detection
+  DRIFT_DETECTED: 'drift_detected',
 } as const;

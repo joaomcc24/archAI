@@ -11,7 +11,6 @@ export const generateTaskSchema = z.object({
 // GitHub connect request
 export const githubConnectSchema = z.object({
   repoName: z.string().regex(/^[\w\-\.]+\/[\w\-\.]+$/, 'Invalid repository name format (expected: owner/repo)'),
-  githubToken: z.string().min(1, 'GitHub token is required'),
   branch: z.string().optional(),
 });
 

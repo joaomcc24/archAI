@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
 import { ProjectService } from '@/lib/services/ProjectService';
 import { SnapshotService } from '@/lib/services/SnapshotService';
 import { supabaseAdmin } from '@/lib/supabase-server';
+import { checkProjectAccess } from '@/lib/auth-project';
 
 export interface Task {
   id: string;
@@ -20,20 +20,20 @@ export async function GET(
   { params }: { params: Promise<{ snapshotId: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
-
     const { snapshotId } = await params;
 
-    // Verify snapshot ownership through project
     const snapshot = await SnapshotService.getSnapshotById(snapshotId);
     if (!snapshot) {
       return NextResponse.json({ error: 'Snapshot not found' }, { status: 404 });
     }
 
     const project = await ProjectService.getProjectById(snapshot.project_id);
-    if (!project || project.user_id !== auth.user.id) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    const access = await checkProjectAccess(request, project.id, 'viewer');
+    if ('error' in access) {
+      return access.error;
     }
 
     const { data, error } = await supabaseAdmin

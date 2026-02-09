@@ -62,7 +62,7 @@ export const PLANS: Record<string, SubscriptionPlan> = {
       'Unlimited task generations',
       'Priority support',
       'Export to PDF',
-      'Team collaboration (coming soon)',
+      'Team collaboration',
     ],
     limits: {
       repos: -1,

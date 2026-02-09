@@ -65,7 +65,7 @@ function GithubCallbackContent() {
 
         // Redirect to repository selection page
         const reposParam = encodeURIComponent(JSON.stringify(data.repositories));
-        router.replace(`/connect/select?repos=${reposParam}&token=${data.githubToken}`);
+        router.replace(`/connect/select?repos=${reposParam}`);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to finish GitHub OAuth');
         setStatus("");
@@ -107,6 +107,5 @@ export default function GithubCallbackPage() {
     </ProtectedRoute>
   );
 }
-
 
 

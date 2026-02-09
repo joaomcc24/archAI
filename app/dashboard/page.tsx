@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "../../contexts/AuthContext";
 import { ProtectedRoute } from "../../components/ProtectedRoute";
 import { supabase } from "../../lib/supabase";
 import { trackEvent, AnalyticsEvents } from "../../lib/analytics";
 import { DriftScore } from "@/components/DriftScore";
+import { ProjectMembers } from "@/components/ProjectMembers";
+import { AppTopBar } from "@/components/AppTopBar";
 
 interface Project {
   id: string;
@@ -40,29 +42,30 @@ interface DriftResult {
   created_at: string;
 }
 
+interface ProjectMember {
+  user_id: string;
+  role: 'owner' | 'member' | 'viewer';
+}
+
 interface ProjectWithSnapshots extends Project {
   latestSnapshot: Snapshot | null;
   snapshotCount: number;
   latestDrift?: DriftResult | null;
+  userRole?: 'owner' | 'member' | 'viewer';
+  memberCount?: number;
 }
 
 function DashboardContent() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [projects, setProjects] = useState<ProjectWithSnapshots[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState<{ [projectId: string]: boolean }>({});
   const [deleting, setDeleting] = useState<{ [projectId: string]: boolean }>({});
+  const [sharingProject, setSharingProject] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      fetchProjects();
-      fetchTasks();
-    }
-  }, [user]);
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -72,17 +75,28 @@ function DashboardContent() {
           'Authorization': `Bearer ${session.access_token}`,
         },
       });
-      const data = await response.json();
-
-      if (response.ok) {
-        setTasks(data.tasks || []);
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('Failed to fetch tasks:', response.status, text);
+        return;
       }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Expected JSON but got:', contentType, text.substring(0, 100));
+        return;
+      }
+
+      const data = await response.json();
+      setTasks(data.tasks || []);
     } catch (err) {
       console.error('Failed to fetch tasks:', err);
     }
-  };
+  }, []);
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     if (!user) return;
     
     try {
@@ -97,11 +111,26 @@ function DashboardContent() {
           'Authorization': `Bearer ${session.access_token}`,
         },
       });
-      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch projects');
+        const text = await response.text();
+        let errorMessage = 'Failed to fetch projects';
+        try {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          errorMessage = `HTTP ${response.status}: ${text.substring(0, 100)}`;
+        }
+        throw new Error(errorMessage);
       }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Expected JSON but got ${contentType}: ${text.substring(0, 100)}`);
+      }
+
+      const data = await response.json();
 
       const projectsList: Project[] = data.projects;
       
@@ -114,6 +143,16 @@ function DashboardContent() {
                 'Authorization': `Bearer ${session.access_token}`,
               } : {},
             });
+            
+            if (!snapshotsResponse.ok) {
+              throw new Error(`Failed to fetch snapshots: ${snapshotsResponse.status}`);
+            }
+
+            const contentType = snapshotsResponse.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+              throw new Error('Expected JSON from snapshots API');
+            }
+
             const snapshotsData = await snapshotsResponse.json();
             const snapshots: Snapshot[] = snapshotsData.snapshots || [];
             const latestSnapshot = snapshots[0] ?? null;
@@ -136,11 +175,33 @@ function DashboardContent() {
               // Ignore drift fetch errors
             }
 
+            // Fetch user role and member count
+            let userRole: 'owner' | 'member' | 'viewer' | undefined;
+            let memberCount: number | undefined;
+            try {
+              const membersResponse = await fetch(`/api/projects/${project.id}/members`, {
+                headers: session ? {
+                  'Authorization': `Bearer ${session.access_token}`,
+                } : {},
+              });
+              if (membersResponse.ok) {
+                const membersData = await membersResponse.json();
+                const members: ProjectMember[] = membersData.members || [];
+                memberCount = members.length;
+                const currentUserMember = members.find((member) => member.user_id === user?.id);
+                userRole = currentUserMember?.role;
+              }
+            } catch {
+              // Ignore member fetch errors
+            }
+
             return {
               ...project,
               latestSnapshot,
               snapshotCount: snapshots.length,
               latestDrift,
+              userRole,
+              memberCount,
             };
           } catch {
             return {
@@ -159,7 +220,14 @@ function DashboardContent() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      fetchProjects();
+      fetchTasks();
+    }
+  }, [user, fetchProjects, fetchTasks]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -253,52 +321,25 @@ function DashboardContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-            <p className="mt-4 text-gray-600">Loading your projects...</p>
-          </div>
+      <div className="dashboard min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+          <p className="mt-4 text-gray-600">Loading your projects...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="dashboard min-h-screen bg-gray-50">
+        <AppTopBar />
+        <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
               <p className="text-gray-600 mt-1">Manage your connected GitHub repositories</p>
             </div>
-            <div className="flex items-center gap-3">
-              <a
-                href="/analytics"
-                className="px-4 py-2 bg-slate-800 rounded-lg text-sm font-medium text-white hover:bg-slate-700 transition-colors inline-flex items-center gap-2 shadow-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                Analytics
-              </a>
-              <a
-                href="/billing"
-                className="px-4 py-2 bg-slate-800 rounded-lg text-sm font-medium text-white hover:bg-slate-700 transition-colors shadow-sm"
-              >
-                Billing
-              </a>
-              <span className="text-sm text-gray-600 px-3 py-2 bg-white rounded-lg border border-gray-200">{user?.email}</span>
-              <Button
-                className="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-medium hover:bg-slate-700 shadow-sm"
-                onClick={signOut}
-              >
-                Sign Out
-              </Button>
-            </div>
-          </div>
         </div>
 
         {error && (
@@ -361,10 +402,10 @@ function DashboardContent() {
                   className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 shadow-sm"
                 >
                   <div className="flex items-start justify-between mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="p-3 rounded-xl flex-shrink-0 github-icon-wrap">
                         <svg
-                          className="w-6 h-6 text-gray-700"
+                          className="w-6 h-6 github-icon"
                           fill="currentColor"
                           viewBox="0 0 20 20"
                         >
@@ -375,14 +416,27 @@ function DashboardContent() {
                           />
                         </svg>
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900 text-lg">{project.repo_name}</h3>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-gray-900 text-lg truncate">{project.repo_name}</h3>
                         <p className="text-sm text-gray-500">GitHub Repository</p>
                       </div>
                     </div>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      Connected
-                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                      {project.userRole && (
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${
+                          project.userRole === 'owner'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : project.userRole === 'member'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-gray-50 text-gray-700 border-gray-200'
+                        }`}>
+                          {project.userRole.charAt(0).toUpperCase() + project.userRole.slice(1)}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                        Connected
+                      </span>
+                    </div>
                   </div>
 
                   <div className="mb-6 space-y-3">
@@ -440,14 +494,14 @@ function DashboardContent() {
                   <div className="space-y-2.5 pt-4 border-t border-gray-100">
                     <div className="flex gap-2">
                       <Button
-                        className="flex-1 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        className="flex-1 bg-blue-600 border border-indigo-200 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                         onClick={() => handleGenerateArchitecture(project.id)}
                         disabled={generating[project.id] || deleting[project.id]}
                       >
                         {generating[project.id] ? 'Generating...' : 'Generate Architecture'}
                       </Button>
                       <Button
-                        className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 shadow-sm border border-gray-200"
+                        className="px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm border github-link inline-flex items-center gap-2"
                         onClick={() => {
                           window.open(`https://github.com/${project.repo_name}`, '_blank');
                         }}
@@ -456,11 +510,12 @@ function DashboardContent() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
+                        <span>GitHub</span>
                       </Button>
                     </div>
                     {project.snapshotCount > 0 && (
                       <Button
-                        className="w-full bg-purple-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        className="w-full bg-purple-600 border border-indigo-200 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                         onClick={() => {
                           window.location.href = `/projects/${project.id}/drift`;
                         }}
@@ -469,17 +524,61 @@ function DashboardContent() {
                         Detect Drift
                       </Button>
                     )}
-                    <Button
-                      className="w-full bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                      onClick={() => handleDeleteProject(project.id)}
-                      disabled={deleting[project.id]}
-                    >
-                      {deleting[project.id] ? 'Removing...' : 'Delete Connection'}
-                    </Button>
+                    {project.userRole === 'owner' && (
+                      <Button
+                        className="w-full bg-indigo-50 border border-indigo-200 text-indigo-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        onClick={() => setSharingProject(project.id)}
+                        disabled={deleting[project.id]}
+                      >
+                        Share Project
+                      </Button>
+                    )}
+                    {project.userRole === 'owner' && (
+                      <Button
+                        className="w-full bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        onClick={() => handleDeleteProject(project.id)}
+                        disabled={deleting[project.id]}
+                      >
+                        {deleting[project.id] ? 'Removing...' : 'Delete Connection'}
+                      </Button>
+                    )}
+                    {project.userRole !== 'owner' && (
+                      <Button
+                        className="w-full bg-gray-50 border border-gray-200 text-gray-700 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        onClick={() => setSharingProject(project.id)}
+                        disabled={deleting[project.id]}
+                      >
+                        View Members
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
+
+            {/* Share Project Modal */}
+            {sharingProject && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                  <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-gray-900">Project Members</h2>
+                    <button
+                      onClick={() => setSharingProject(null)}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  <ProjectMembers
+                    projectId={sharingProject}
+                    userRole={projects.find(p => p.id === sharingProject)?.userRole || 'viewer'}
+                    onClose={() => setSharingProject(null)}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Tasks Section */}
             {tasks.length > 0 && (

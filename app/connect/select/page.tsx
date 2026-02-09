@@ -40,8 +40,14 @@ function SelectRepositoryContent() {
       try {
         const reposData = searchParams.get('repos');
         if (reposData) {
-          const parsedRepos = JSON.parse(decodeURIComponent(reposData));
-          setRepositories(parsedRepos);
+          try {
+            const decoded = decodeURIComponent(reposData);
+            const parsedRepos = JSON.parse(decoded);
+            setRepositories(parsedRepos);
+          } catch (err) {
+            console.error('Failed to parse repositories from URL params:', err);
+            setError('Failed to load repositories. Please reconnect GitHub and try again.');
+          }
         } else {
           setError('No repositories found. Please try connecting again.');
         }
@@ -77,7 +83,6 @@ function SelectRepositoryContent() {
         },
         body: JSON.stringify({
           repoName: repoFullName,
-          githubToken: searchParams.get('token'),
         }),
       });
 
@@ -129,7 +134,6 @@ function SelectRepositoryContent() {
         },
         body: JSON.stringify({
           repoName: selectedRepo,
-          githubToken: searchParams.get('token'),
           branch: selectedBranch,
         }),
       });

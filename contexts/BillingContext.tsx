@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 
 interface Plan {
@@ -51,19 +51,55 @@ export function BillingProvider({ children }: { children: ReactNode }) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const refreshingRef = useRef(false);
 
-  const fetchPlans = async () => {
+  const fetchPlans = useCallback(async () => {
     try {
       const response = await fetch('/api/billing/plans');
-      const data = await response.json();
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('Failed to fetch plans:', response.status, text.substring(0, 100));
+        setPlans([]);
+        return;
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Expected JSON from plans API, got:', contentType, text.substring(0, 100));
+        setPlans([]);
+        return;
+      }
+
+      const text = await response.text();
+      if (!text) {
+        console.error('Empty response from plans API');
+        setPlans([]);
+        return;
+      }
+
+      const data = JSON.parse(text);
       setPlans(data.plans || []);
     } catch (err) {
       console.error('Error fetching plans:', err);
+      setPlans([]);
     }
-  };
+  }, []);
 
-  const refreshSubscription = async () => {
-    if (!session?.access_token) return;
+  const refreshSubscription = useCallback(async () => {
+    if (!session?.access_token) {
+      setLoading(false);
+      return;
+    }
+
+    // Prevent multiple simultaneous calls
+    if (refreshingRef.current) {
+      return;
+    }
+
+    refreshingRef.current = true;
+    setLoading(true);
 
     try {
       const [subResponse, limitsResponse] = await Promise.all([
@@ -75,21 +111,51 @@ export function BillingProvider({ children }: { children: ReactNode }) {
         }),
       ]);
 
-      const subData = await subResponse.json();
-      const limitsData = await limitsResponse.json();
+      // Check content type before reading body
+      const subContentType = subResponse.headers.get('content-type');
+      const limitsContentType = limitsResponse.headers.get('content-type');
+
+      // Read response bodies once (can only be read once)
+      const subText = await subResponse.text();
+      const limitsText = await limitsResponse.text();
+
+      // Check if responses are OK and have content
+      if (!subResponse.ok) {
+        throw new Error(`Subscription API error: ${subResponse.status} - ${subText.substring(0, 100)}`);
+      }
+
+      if (!limitsResponse.ok) {
+        throw new Error(`Limits API error: ${limitsResponse.status} - ${limitsText.substring(0, 100)}`);
+      }
+
+      if (!subContentType || !subContentType.includes('application/json')) {
+        throw new Error(`Expected JSON from subscription API, got: ${subContentType} - ${subText.substring(0, 100)}`);
+      }
+
+      if (!limitsContentType || !limitsContentType.includes('application/json')) {
+        throw new Error(`Expected JSON from limits API, got: ${limitsContentType} - ${limitsText.substring(0, 100)}`);
+      }
+
+      if (!subText || !limitsText) {
+        throw new Error('Empty response from API');
+      }
+
+      const subData = JSON.parse(subText);
+      const limitsData = JSON.parse(limitsText);
 
       setSubscription(subData.subscription);
       setLimits(limitsData.limits);
       setError(null);
     } catch (err) {
       console.error('Error fetching subscription:', err);
-      setError('Failed to load subscription');
+      setError(err instanceof Error ? err.message : 'Failed to load subscription');
     } finally {
       setLoading(false);
+      refreshingRef.current = false;
     }
-  };
+  }, [session?.access_token]);
 
-  const createCheckout = async (priceId: string) => {
+  const createCheckout = useCallback(async (priceId: string) => {
     if (!session?.access_token) return;
 
     try {
@@ -111,9 +177,9 @@ export function BillingProvider({ children }: { children: ReactNode }) {
       console.error('Error creating checkout:', err);
       setError('Failed to create checkout session');
     }
-  };
+  }, [session?.access_token]);
 
-  const openPortal = async () => {
+  const openPortal = useCallback(async () => {
     if (!session?.access_token) return;
 
     try {
@@ -134,24 +200,24 @@ export function BillingProvider({ children }: { children: ReactNode }) {
       console.error('Error opening portal:', err);
       setError('Failed to open billing portal');
     }
-  };
+  }, [session?.access_token]);
 
-  const canUseFeature = (feature: 'repos' | 'snapshots' | 'tasks'): boolean => {
+  const canUseFeature = useCallback((feature: 'repos' | 'snapshots' | 'tasks'): boolean => {
     if (!limits) return true; // Allow if limits not loaded yet
     return limits[feature]?.allowed ?? true;
-  };
+  }, [limits]);
 
   useEffect(() => {
     fetchPlans();
-  }, []);
+  }, [fetchPlans]);
 
   useEffect(() => {
-    if (user && session) {
+    if (user && session?.access_token) {
       refreshSubscription();
     } else {
       setLoading(false);
     }
-  }, [user, session]);
+  }, [user, session?.access_token, refreshSubscription]);
 
   return (
     <BillingContext.Provider

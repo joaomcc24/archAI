@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
 import { SnapshotService } from '@/lib/services/SnapshotService';
 import { ProjectService } from '@/lib/services/ProjectService';
+import { checkProjectAccess } from '@/lib/auth-project';
 
 // GET /api/snapshots/project/[projectId]/latest - Get latest snapshot for a project
 export async function GET(
@@ -9,15 +9,15 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
-
     const { projectId } = await params;
 
-    // Verify project belongs to user
     const project = await ProjectService.getProjectById(projectId);
-    if (!project || project.user_id !== auth.user.id) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    const access = await checkProjectAccess(request, projectId, 'viewer');
+    if ('error' in access) {
+      return access.error;
     }
 
     const snapshot = await SnapshotService.getLatestSnapshot(projectId);

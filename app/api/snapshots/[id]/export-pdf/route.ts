@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
 import { SnapshotService } from '@/lib/services/SnapshotService';
 import { ProjectService } from '@/lib/services/ProjectService';
 import { billingService } from '@/lib/services/BillingService';
-import { formatErrorResponse, NotFoundError, AuthorizationError } from '@/lib/errors';
+import { formatErrorResponse, NotFoundError } from '@/lib/errors';
 import { validateParams, snapshotIdSchema, formatZodError } from '@/lib/validation';
+import { checkProjectAccess } from '@/lib/auth-project';
 import '@/lib/env-validation'; // Validate env vars on module load
 
 // POST /api/snapshots/[id]/export-pdf - Export snapshot as PDF
@@ -13,9 +13,6 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
-
     const { id } = await params;
     
     // Validate snapshot ID
@@ -34,15 +31,18 @@ export async function POST(
       return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
     }
 
-    // Verify ownership
     const project = await ProjectService.getProjectById(snapshot.project_id);
-    if (!project || project.user_id !== auth.user.id) {
-      const error = new AuthorizationError('You do not have access to this snapshot');
+    if (!project) {
+      const error = new NotFoundError('Project');
       return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
+    }
+    const access = await checkProjectAccess(request, project.id, 'viewer');
+    if ('error' in access) {
+      return access.error;
     }
 
     // Check if user has Pro plan (PDF export is a Pro feature)
-    const subscription = await billingService.getSubscription(auth.user.id);
+    const subscription = await billingService.getSubscription(access.user.id);
     if (subscription.plan.id === 'free') {
       return NextResponse.json(
         formatErrorResponse(new Error('PDF export is only available for Pro users. Upgrade to Pro to export snapshots as PDF.')),

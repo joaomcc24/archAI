@@ -66,6 +66,14 @@ export const AnalyticsEvents = {
   SUBSCRIPTION_UPGRADED: 'subscription_upgraded',
   SUBSCRIPTION_CANCELLED: 'subscription_cancelled',
   
+  // Team Collaboration
+  PROJECT_SHARED: 'project_shared',
+  INVITATION_SENT: 'invitation_sent',
+  INVITATION_ACCEPTED: 'invitation_accepted',
+  MEMBER_ADDED: 'member_added',
+  MEMBER_REMOVED: 'member_removed',
+  MEMBER_ROLE_UPDATED: 'member_role_updated',
+  
   // Pages
   PAGE_VIEWED: 'page_viewed',
 } as const;

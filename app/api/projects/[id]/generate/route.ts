@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
+import { checkProjectAccess } from '@/lib/auth-project';
 import { ProjectService } from '@/lib/services/ProjectService';
 import { RepoParserService } from '@/lib/services/RepoParserService';
 import { LLMService } from '@/lib/services/LLMService';
@@ -17,11 +17,26 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
+    const { id } = await params;
+    
+    // Validate project ID
+    const paramValidation = validateParams({ id }, projectIdSchema);
+    if (!paramValidation.success) {
+      const zodError = formatZodError(paramValidation.error);
+      return NextResponse.json(
+        formatErrorResponse(new Error(zodError.error)),
+        { status: 400 }
+      );
+    }
+
+    // Require at least member access (viewers can't generate)
+    const access = await checkProjectAccess(request, paramValidation.data.id, 'member');
+    if ('error' in access) {
+      return access.error;
+    }
 
     // Apply rate limiting for LLM endpoints
-    const rateLimitResult = rateLimiters.llm(request, auth.user.id);
+    const rateLimitResult = rateLimiters.llm(request, access.user.id);
     if (!rateLimitResult.allowed) {
       return NextResponse.json(
         formatErrorResponse(new Error(`Rate limit exceeded. Please try again in ${rateLimitResult.retryAfter} seconds.`)),
@@ -38,7 +53,7 @@ export async function POST(
     }
 
     // Check snapshot limit before generating
-    const limitCheck = await billingService.checkLimit(auth.user.id, 'snapshots');
+    const limitCheck = await billingService.checkLimit(access.user.id, 'snapshots');
     if (!limitCheck.allowed) {
       const error = new LimitExceededError(
         'snapshots',
@@ -49,27 +64,10 @@ export async function POST(
       return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
     }
 
-    const { id } = await params;
-    
-    // Validate project ID
-    const paramValidation = validateParams({ id }, projectIdSchema);
-    if (!paramValidation.success) {
-      const zodError = formatZodError(paramValidation.error);
-      return NextResponse.json(
-        formatErrorResponse(new Error(zodError.error)),
-        { status: 400 }
-      );
-    }
-
     const project = await ProjectService.getProjectById(paramValidation.data.id);
 
     if (!project) {
       const error = new NotFoundError('Project');
-      return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
-    }
-
-    if (project.user_id !== auth.user.id) {
-      const error = new AuthorizationError('You do not have access to this project');
       return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
     }
 
@@ -125,7 +123,7 @@ export async function POST(
       project_id: project.id,
       repo_name: project.repo_name,
       snapshot_id: snapshot.id,
-    }, auth.user.id);
+    }, access.user.id);
 
     return NextResponse.json({
       success: true,

@@ -14,10 +14,14 @@ export async function POST(request: NextRequest) {
     const auth = await authenticateRequest(request);
     if ('error' in auth) return auth.error;
 
-    const { code } = await request.json();
+    const { code, state } = await request.json();
 
     if (!code) {
       return NextResponse.json({ error: 'Authorization code is required' }, { status: 400 });
+    }
+    const stateCookie = request.cookies.get('gh_oauth_state')?.value;
+    if (!state || !stateCookie || state !== stateCookie) {
+      return NextResponse.json({ error: 'Invalid OAuth state' }, { status: 400 });
     }
 
     // Exchange code for access token
@@ -69,9 +73,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No repositories found' }, { status: 400 });
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
-      githubToken: access_token,
       githubUser: {
         id: githubUser.id,
         login: githubUser.login,
@@ -86,6 +89,25 @@ export async function POST(request: NextRequest) {
         private: repo.private,
       })),
     });
+    response.cookies.set({
+      name: 'gh_oauth_state',
+      value: '',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 0,
+      path: '/',
+    });
+    response.cookies.set({
+      name: 'gh_token',
+      value: access_token,
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 10 * 60, // 10 minutes
+      path: '/',
+    });
+    return response;
   } catch (error) {
     console.error('GitHub OAuth error:', error);
     return NextResponse.json(

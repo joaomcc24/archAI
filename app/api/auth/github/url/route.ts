@@ -13,5 +13,15 @@ export async function GET(request: NextRequest) {
 
   const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo&state=${state}`;
 
-  return NextResponse.json({ authUrl, state });
+  const response = NextResponse.json({ authUrl });
+  response.cookies.set({
+    name: 'gh_oauth_state',
+    value: state,
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 10 * 60, // 10 minutes
+    path: '/',
+  });
+  return response;
 }

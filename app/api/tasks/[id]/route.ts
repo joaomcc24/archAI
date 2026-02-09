@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authenticateRequest } from '@/lib/auth';
 import { ProjectService } from '@/lib/services/ProjectService';
 import { supabaseAdmin } from '@/lib/supabase-server';
+import { checkProjectAccess } from '@/lib/auth-project';
 
 export interface Task {
   id: string;
@@ -19,9 +19,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
-
     const { id } = await params;
 
     const { data: task, error } = await supabaseAdmin
@@ -34,10 +31,13 @@ export async function GET(
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
-    // Verify ownership through project
     const project = await ProjectService.getProjectById(task.project_id);
-    if (!project || project.user_id !== auth.user.id) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    const access = await checkProjectAccess(request, project.id, 'viewer');
+    if ('error' in access) {
+      return access.error;
     }
 
     return NextResponse.json({ task: task as Task });
@@ -59,9 +59,6 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await authenticateRequest(request);
-    if ('error' in auth) return auth.error;
-
     const { id } = await params;
 
     // Get the task first
@@ -75,10 +72,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
     }
 
-    // Verify ownership through project
     const project = await ProjectService.getProjectById(task.project_id);
-    if (!project || project.user_id !== auth.user.id) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+    if (!project) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    const access = await checkProjectAccess(request, project.id, 'viewer');
+    if ('error' in access) {
+      return access.error;
     }
 
     const { error: deleteError } = await supabaseAdmin

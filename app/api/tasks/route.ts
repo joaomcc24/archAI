@@ -61,20 +61,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
     }
 
-    // Get the project and verify ownership
+    // Get the project and verify access (require member access to generate tasks)
     const project = await ProjectService.getProjectById(snapshot.project_id);
     if (!project) {
       const error = new NotFoundError('Project');
       return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
     }
 
-    if (project.user_id !== auth.user.id) {
-      const error = new AuthorizationError('You do not have access to this snapshot');
-      return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
+    // Check access using the new access check
+    const { checkProjectAccess } = await import('@/lib/auth-project');
+    const access = await checkProjectAccess(request, project.id, 'member');
+    if ('error' in access) {
+      return access.error;
     }
 
-    // Check task limit before generating
-    const limitCheck = await billingService.checkLimit(auth.user.id, 'tasks');
+    // Check task limit before generating (use access.user.id from checkProjectAccess)
+    const limitCheck = await billingService.checkLimit(access.user.id, 'tasks');
     if (!limitCheck.allowed) {
       const error = new LimitExceededError(
         'task generations',
@@ -126,7 +128,7 @@ export async function POST(request: NextRequest) {
       snapshot_id: snapshotId,
       task_id: (data as Task).id,
       repo_name: project.repo_name,
-    }, auth.user.id);
+    }, access.user.id);
 
     return NextResponse.json({
       success: true,
@@ -155,8 +157,8 @@ export async function GET(request: NextRequest) {
     const auth = await authenticateRequest(request);
     if ('error' in auth) return auth.error;
 
-    // Get all projects for this user
-    const projects = await ProjectService.getProjectsByUserId(auth.user.id);
+    // Get all projects for this user (including shared projects)
+    const projects = await ProjectService.getProjectsByUserId(auth.user.id, true);
     const projectIds = projects.map((p) => p.id);
 
     if (projectIds.length === 0) {

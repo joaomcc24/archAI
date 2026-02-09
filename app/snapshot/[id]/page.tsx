@@ -212,10 +212,103 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
       // Convert markdown to HTML then to PDF using browser APIs
       const { marked } = await import('marked');
       const html = await marked.parse(data.markdown);
+      const formattedDate = data.createdAt
+        ? formatDate(data.createdAt)
+        : formatDate(snapshot.created_at);
+      const title = data.repoName ? `${data.repoName} Documentation` : 'Architecture Documentation';
+      const template = `
+        <div class="pdf-doc">
+          <div class="pdf-header">
+            <div>
+              <div class="pdf-title">${title}</div>
+              <div class="pdf-subtitle">Generated on ${formattedDate}</div>
+            </div>
+            <div class="pdf-badge">RepoLens</div>
+          </div>
+          <div class="pdf-divider"></div>
+          <div class="pdf-content">${html}</div>
+        </div>
+      `;
       
       // Create a temporary element to render HTML
       const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = html;
+      tempDiv.innerHTML = `
+        <style>
+          .pdf-doc {
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+          }
+          .pdf-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+          }
+          .pdf-title {
+            font-size: 22pt;
+            font-weight: 700;
+            margin-bottom: 4pt;
+          }
+          .pdf-subtitle {
+            font-size: 11pt;
+            color: #475569;
+          }
+          .pdf-badge {
+            font-size: 10pt;
+            padding: 4pt 8pt;
+            border-radius: 9999px;
+            border: 1px solid #e2e8f0;
+            color: #334155;
+          }
+          .pdf-divider {
+            height: 1px;
+            background: #e2e8f0;
+            margin: 12pt 0 18pt 0;
+          }
+          .pdf-content h1 { font-size: 20pt; margin: 14pt 0 8pt; }
+          .pdf-content h2 { font-size: 16pt; margin: 12pt 0 6pt; }
+          .pdf-content h3 { font-size: 13pt; margin: 10pt 0 6pt; }
+          .pdf-content p { font-size: 11pt; line-height: 1.6; margin: 6pt 0; }
+          .pdf-content ul, .pdf-content ol { margin: 6pt 0 6pt 18pt; }
+          .pdf-content li { margin: 3pt 0; }
+          .pdf-content code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            background: #f8fafc;
+            padding: 2pt 4pt;
+            border-radius: 4pt;
+          }
+          .pdf-content pre {
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 10pt;
+            border-radius: 6pt;
+            overflow: hidden;
+            margin: 8pt 0;
+            font-size: 10pt;
+          }
+          .pdf-content blockquote {
+            border-left: 3pt solid #e2e8f0;
+            padding-left: 10pt;
+            color: #475569;
+            margin: 8pt 0;
+          }
+          .pdf-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 8pt 0;
+            font-size: 10pt;
+          }
+          .pdf-content th, .pdf-content td {
+            border: 1px solid #e2e8f0;
+            padding: 6pt;
+            text-align: left;
+          }
+          .pdf-content th {
+            background: #f8fafc;
+          }
+        </style>
+        ${template}
+      `;
       tempDiv.style.position = 'absolute';
       tempDiv.style.left = '-9999px';
       tempDiv.style.width = '210mm'; // A4 width
@@ -441,19 +534,25 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
                 {project ? project.repo_name : 'Architecture'} Documentation
               </h1>
-              <p className="text-gray-500 mt-1">
-                Generated on {formatDate(snapshot.created_at)}
-                {project?.branch && <span className="ml-2 text-sm bg-gray-200 text-gray-700 px-2 py-0.5 rounded">branch: {project.branch}</span>}
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-gray-500">
+                <span>Generated on {formatDate(snapshot.created_at)}</span>
+              </div>
+              {project?.branch && (
+                <div className="mt-2">
+                  <span className="text-sm bg-gray-200 text-gray-700 px-2.5 py-1 rounded-full">
+                    branch: {project.branch}
+                  </span>
+                </div>
+              )}
             </div>
             
             {/* Action Buttons */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleCopyAll}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"

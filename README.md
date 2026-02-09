@@ -125,9 +125,10 @@ graph TD
 - [x] GitHub OAuth Integration
 - [x] Basic File Tree Parsing
 - [x] `architecture.md` Generation
-- [ ] Drift Detection (Compare current repo vs. last snapshot)
-- [ ] `task.md` Generation for Feature Requests
-- [ ] Stripe Billing Integration
+- [x] Drift Detection (Compare current repo vs. last snapshot)
+- [x] `task.md` Generation for Feature Requests
+- [x] Stripe Billing Integration
+- [x] Team Collaboration (Project sharing, roles, invitations)
 
 ---
 

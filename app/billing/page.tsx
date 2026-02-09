@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useBilling } from '../../contexts/BillingContext';
 import { useAuth } from '../../contexts/AuthContext';
 import Link from 'next/link';
+import { AppTopBar } from '../../components/AppTopBar';
 
 function BillingPageContent() {
   const { user, loading: authLoading } = useAuth();
@@ -19,22 +20,36 @@ function BillingPageContent() {
   } = useBilling();
   const searchParams = useSearchParams();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
+  // Handle success redirect
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
-      setMessage({ type: 'success', text: 'Subscription successful! Welcome to Pro.' });
+      setShowSuccessMessage(true);
       refreshSubscription();
     } else if (searchParams.get('canceled') === 'true') {
       setMessage({ type: 'error', text: 'Checkout canceled. You can try again anytime.' });
     }
   }, [searchParams, refreshSubscription]);
 
+  // Show success message once subscription is loaded/updated
+  useEffect(() => {
+    if (showSuccessMessage && subscription?.plan) {
+      const planName = subscription.plan.name;
+      setMessage({ type: 'success', text: `Subscription successful! Welcome to ${planName}.` });
+      setShowSuccessMessage(false);
+    }
+  }, [showSuccessMessage, subscription]);
+
   if (authLoading || billingLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <div className="dashboard min-h-screen bg-gray-50">
+        <AppTopBar />
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
         </div>
       </div>
     );
@@ -42,12 +57,15 @@ function BillingPageContent() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">Please sign in to manage your subscription.</p>
-          <Link href="/login" className="text-blue-600 hover:underline">
-            Sign In
-          </Link>
+      <div className="dashboard min-h-screen bg-gray-50">
+        <AppTopBar />
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <p className="text-gray-600 mb-4">Please sign in to manage your subscription.</p>
+            <Link href="/login" className="text-blue-600 hover:underline">
+              Sign In
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -57,13 +75,11 @@ function BillingPageContent() {
   const isPro = currentPlan?.id === 'pro' || currentPlan?.id === 'team';
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="dashboard min-h-screen bg-gray-50">
+      <AppTopBar />
       <div className="max-w-6xl mx-auto px-4 py-12">
         {/* Header */}
         <div className="mb-8">
-          <Link href="/dashboard" className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-md hover:bg-slate-700 mb-4 transition-colors font-medium text-sm">
-            ← Back to Dashboard
-          </Link>
           <h1 className="text-3xl font-bold text-gray-900">Billing & Subscription</h1>
           <p className="text-gray-600 mt-2">Manage your subscription and billing settings</p>
         </div>
@@ -103,7 +119,12 @@ function BillingPageContent() {
             {isPro && (
               <button
                 onClick={openPortal}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 rounded-lg border transition-colors"
+                style={{
+                  backgroundColor: 'var(--dash-card)',
+                  color: 'var(--dash-text)',
+                  borderColor: 'var(--dash-outline)',
+                }}
               >
                 Manage Subscription
               </button>
@@ -163,10 +184,13 @@ function BillingPageContent() {
 export default function BillingPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+      <div className="dashboard min-h-screen bg-gray-50">
+        <AppTopBar />
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            <p className="mt-4 text-gray-600">Loading...</p>
+          </div>
         </div>
       </div>
     }>
@@ -183,8 +207,13 @@ function UsageCard({ title, current, limit }: { title: string; current: number; 
   return (
     <div className="p-4 bg-gray-50 rounded-lg">
       <div className="flex justify-between items-center mb-2">
-        <span className="text-sm font-medium text-gray-700">{title}</span>
-        <span className={`text-sm ${isNearLimit ? 'text-orange-600' : 'text-gray-600'}`}>
+        <span className="text-sm font-medium" style={{ color: 'var(--dash-text)' }}>
+          {title}
+        </span>
+        <span
+          className={`text-sm ${isNearLimit ? 'text-orange-600' : ''}`}
+          style={!isNearLimit ? { color: 'var(--dash-text)' } : undefined}
+        >
           {current} / {isUnlimited ? '∞' : limit}
         </span>
       </div>

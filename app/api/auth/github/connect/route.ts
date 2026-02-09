@@ -20,7 +20,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(formatErrorResponse(error), { status: error.statusCode });
     }
 
-    const { repoName, githubToken, branch } = validation.data;
+    const { repoName, branch } = validation.data;
+    const githubToken = request.cookies.get('gh_token')?.value;
+    if (!githubToken) {
+      return NextResponse.json(
+        formatErrorResponse(new Error('GitHub token not found. Please reconnect your repository.')),
+        { status: 400 }
+      );
+    }
 
     // #region agent log
     try{const fs=await import('fs');fs.appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'app/api/auth/github/connect/route.ts:23',message:'Before limit check',data:{userId:auth.user.id,repoName,limitType:'repos'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})+'\n');}catch(e){}
@@ -74,10 +81,20 @@ export async function POST(request: NextRequest) {
       branch: selectedBranch,
     }, auth.user.id);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       project,
     });
+    response.cookies.set({
+      name: 'gh_token',
+      value: '',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 0,
+      path: '/',
+    });
+    return response;
   } catch (error) {
     console.error('GitHub connect error:', error);
     return NextResponse.json(formatErrorResponse(error), { status: 500 });

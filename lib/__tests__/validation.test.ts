@@ -39,7 +39,6 @@ describe('Validation Schemas', () => {
     it('should validate correct GitHub connect request', () => {
       const valid = {
         repoName: 'owner/repo',
-        githubToken: 'ghp_token123',
       };
 
       const result = githubConnectSchema.safeParse(valid);
@@ -49,7 +48,6 @@ describe('Validation Schemas', () => {
     it('should reject invalid repository name format', () => {
       const invalid = {
         repoName: 'invalid-repo-name',
-        githubToken: 'ghp_token123',
       };
 
       const result = githubConnectSchema.safeParse(invalid);
