@@ -14,6 +14,8 @@ export default function AccountPage() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportWarning, setExportWarning] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     setOptOut(getAnalyticsOptOut());
@@ -70,6 +72,56 @@ export default function AccountPage() {
       setExportError(message);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    setDeleteError(null);
+
+    const confirmed = window.confirm(
+      'Are you sure? This will permanently delete your RepoLens account and associated data.'
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Please sign in again to delete your account.');
+      }
+
+      const response = await fetch('/api/account/delete', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const text = await response.text();
+      if (!response.ok) {
+        let message = 'Failed to delete account';
+        try {
+          const payload = JSON.parse(text) as { error?: string; userMessage?: string };
+          message = payload.userMessage || payload.error || message;
+        } catch {
+          if (text) {
+            message = text;
+          }
+        }
+        throw new Error(message);
+      }
+
+      // Sign out locally and redirect to landing
+      await supabase.auth.signOut();
+      if (typeof window !== 'undefined') {
+        window.location.href = '/';
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete account';
+      setDeleteError(message);
+      setDeleting(false);
     }
   };
 
@@ -207,7 +259,7 @@ export default function AccountPage() {
           <section className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-gray-900">Danger zone</h2>
             <p className="text-gray-600 mt-2">
-              Need to export or delete your data? Contact support and we’ll help you out.
+              Export your data or permanently delete your account.
             </p>
             {exportError && (
               <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-700 border border-red-200 text-sm">
@@ -219,6 +271,11 @@ export default function AccountPage() {
                 {exportWarning}
               </div>
             )}
+            {deleteError && (
+              <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-700 border border-red-200 text-sm">
+                {deleteError}
+              </div>
+            )}
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
@@ -228,12 +285,14 @@ export default function AccountPage() {
               >
                 {exporting ? 'Preparing export...' : 'Download data export'}
               </button>
-              <a
-                href="mailto:support@repolens.ai?subject=RepoLens%20Account%20Deletion"
-                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 shadow-sm"
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 shadow-sm disabled:opacity-50"
+                disabled={deleting}
               >
-                Delete account
-              </a>
+                {deleting ? 'Deleting account...' : 'Delete account'}
+              </button>
             </div>
           </section>
         </div>

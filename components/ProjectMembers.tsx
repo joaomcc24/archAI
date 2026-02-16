@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface ProjectMember {
   id: string;
@@ -37,6 +38,7 @@ interface ProjectMembersProps {
 
 export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersProps) {
   const { user } = useAuth();
+  const { theme } = useTheme();
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,8 +47,12 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
   const [inviting, setInviting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [canShare, setCanShare] = useState(false);
+  const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
+  const [lastInvitedEmail, setLastInvitedEmail] = useState<string | null>(null);
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
 
   const isOwner = userRole === 'owner';
+  const isDark = theme === 'dark';
 
   useEffect(() => {
     if (projectId) {
@@ -82,6 +88,7 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
   const fetchMembers = async () => {
     try {
       setLoading(true);
+      setError(null);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
@@ -91,15 +98,23 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
         },
       });
 
+      const text = await response.text();
       if (!response.ok) {
-        throw new Error('Failed to fetch members');
+        let message = 'Failed to load members';
+        try {
+          const data = JSON.parse(text) as { error?: string };
+          message = data.error || message;
+        } catch {
+          if (text) message = text.slice(0, 200);
+        }
+        throw new Error(message);
       }
 
-      const data = await response.json();
+      const data = JSON.parse(text) as { members?: ProjectMember[] };
       setMembers(data.members || []);
     } catch (err) {
       console.error('Failed to fetch members:', err);
-      setError('Failed to load members');
+      setError(err instanceof Error ? err.message : 'Failed to load members');
     } finally {
       setLoading(false);
     }
@@ -109,6 +124,7 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
     if (!isOwner) return;
 
     try {
+      setError(null);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
@@ -118,14 +134,23 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
         },
       });
 
+      const text = await response.text();
       if (!response.ok) {
-        throw new Error('Failed to fetch invitations');
+        let message = 'Failed to load invitations';
+        try {
+          const data = JSON.parse(text) as { error?: string };
+          message = data.error || message;
+        } catch {
+          if (text) message = text.slice(0, 200);
+        }
+        throw new Error(message);
       }
 
-      const data = await response.json();
+      const data = JSON.parse(text) as { invitations?: ProjectInvitation[] };
       setInvitations(data.invitations || []);
     } catch (err) {
       console.error('Failed to fetch invitations:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load invitations');
     }
   };
 
@@ -154,18 +179,25 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
         }),
       });
 
+      const text = await response.text();
       if (!response.ok) {
-        const text = await response.text();
         let errorMessage = 'Failed to send invitation';
         try {
-          const errorData = JSON.parse(text);
+          const errorData = JSON.parse(text) as { error?: string };
           errorMessage = errorData.error || errorMessage;
         } catch {
-          errorMessage = `HTTP ${response.status}: ${text.substring(0, 100)}`;
+          errorMessage = text ? text.slice(0, 200) : `HTTP ${response.status}`;
         }
         throw new Error(errorMessage);
       }
 
+      const data = JSON.parse(text) as { invitation?: { token?: string } };
+      const token = data.invitation?.token;
+      const emailed = inviteEmail.trim();
+      if (token && typeof window !== 'undefined') {
+        setLastInviteLink(`${window.location.origin}/invitations/${token}`);
+        setLastInvitedEmail(emailed);
+      }
       setInviteEmail("");
       await fetchInvitations();
     } catch (err) {
@@ -201,6 +233,7 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
 
   const handleRevokeInvitation = async (invitationId: string) => {
     try {
+      setError(null);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
@@ -212,13 +245,44 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
       });
 
       if (!response.ok) {
-        throw new Error('Failed to revoke invitation');
+        const text = await response.text();
+        let msg = 'Failed to revoke invitation';
+        try {
+          const data = JSON.parse(text) as { error?: string };
+          msg = data.error || msg;
+        } catch {
+          if (text) msg = text.slice(0, 200);
+        }
+        throw new Error(msg);
       }
 
+      setLastInviteLink(null);
+      setLastInvitedEmail(null);
       await fetchInvitations();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to revoke invitation');
     }
+  };
+
+  const copyInviteLink = async () => {
+    if (!lastInviteLink) return;
+    try {
+      await navigator.clipboard.writeText(lastInviteLink);
+      setInviteLinkCopied(true);
+      setTimeout(() => setInviteLinkCopied(false), 2000);
+    } catch {
+      setError('Could not copy to clipboard');
+    }
+  };
+
+  const sendInviteEmail = () => {
+    if (!lastInviteLink) return;
+    const to = lastInvitedEmail || '';
+    const subject = encodeURIComponent('Invitation to collaborate on a RepoLens project');
+    const body = encodeURIComponent(
+      `You've been invited to collaborate on a project in RepoLens.\n\nOpen this link to accept the invitation:\n${lastInviteLink}`
+    );
+    window.location.href = `mailto:${to ? `?to=${encodeURIComponent(to)}&` : '?'}subject=${subject}&body=${body}`;
   };
 
   const handleUpdateRole = async (userId: string, newRole: 'member' | 'viewer') => {
@@ -271,11 +335,67 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
     );
   }
 
+  const handleRetry = () => {
+    setError(null);
+    void fetchMembers();
+    if (isOwner) void fetchInvitations();
+  };
+
   return (
     <div className="p-6 space-y-6">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-          {error}
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <Button variant="secondary" size="sm" onClick={handleRetry}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {lastInviteLink && (
+        <div
+          className={`rounded-lg p-4 space-y-2 border ${
+            isDark
+              ? 'bg-emerald-950/40 border-emerald-800/50'
+              : 'bg-emerald-50 border-emerald-200'
+          }`}
+        >
+          <p
+            className={`text-sm font-medium ${
+              isDark ? 'text-emerald-200' : 'text-emerald-800'
+            }`}
+          >
+            Invitation created. Share this link with the invitee:
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <code
+              className={`flex-1 min-w-0 text-xs px-2 py-1.5 rounded border truncate block ${
+                isDark
+                  ? 'text-emerald-100 bg-emerald-900/30 border-emerald-800/50'
+                  : 'text-emerald-900 bg-white/80 border-emerald-200'
+              }`}
+            >
+              {lastInviteLink}
+            </code>
+            <Button type="button" variant="secondary" size="sm" onClick={copyInviteLink}>
+              {inviteLinkCopied ? 'Copied!' : 'Copy link'}
+            </Button>
+            <Button type="button" variant="secondary" size="sm" onClick={sendInviteEmail}>
+              Send email
+            </Button>
+            <button
+              type="button"
+              onClick={() => {
+                setLastInviteLink(null);
+                setLastInvitedEmail(null);
+              }}
+              className={`text-xs hover:underline ${
+                isDark ? 'text-emerald-300 hover:text-emerald-200' : 'text-emerald-700 hover:text-emerald-800'
+              }`}
+            >
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
 

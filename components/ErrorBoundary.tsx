@@ -28,27 +28,46 @@ class ErrorBoundaryClass extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{
-          minHeight: '100vh',
-          backgroundColor: '#f9fafb',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '48px 16px'
-        }}>
-          <div style={{ maxWidth: '448px', width: '100%', textAlign: 'center' }}>
-            <h1 style={{
-              fontSize: '24px',
-              fontWeight: 'bold',
-              color: '#111827',
-              marginBottom: '16px'
-            }}>
+        <div
+          style={{
+            minHeight: '100vh',
+            backgroundColor: 'var(--landing-bg)',
+            color: 'var(--landing-text)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '48px 16px',
+          }}
+        >
+          <div
+            style={{
+              maxWidth: '448px',
+              width: '100%',
+              textAlign: 'center',
+              backgroundColor: 'rgba(15, 23, 42, 0.04)',
+              borderRadius: '16px',
+              padding: '24px 20px',
+              border: '1px solid rgba(148, 163, 184, 0.4)',
+              backdropFilter: 'blur(10px)',
+            }}
+          >
+            <h1
+              style={{
+                fontSize: '24px',
+                fontWeight: 'bold',
+                marginBottom: '12px',
+              }}
+            >
               Something went wrong
             </h1>
-            <p style={{
-              color: '#6b7280',
-              marginBottom: '24px'
-            }}>
+            <p
+              style={{
+                fontSize: '14px',
+                marginBottom: '24px',
+                color: 'var(--landing-muted, #94a3b8)',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
               {this.state.error?.message || 'An unexpected error occurred'}
             </p>
             <button
@@ -57,15 +76,18 @@ class ErrorBoundaryClass extends Component<Props, State> {
                 window.location.href = '/';
               }}
               style={{
-                padding: '8px 16px',
-                backgroundColor: '#2563eb',
-                color: 'white',
-                borderRadius: '6px',
+                padding: '8px 18px',
+                backgroundImage: 'linear-gradient(to right, #22c55e, #22c55e, #14b8a6)',
+                color: '#0b1120',
+                borderRadius: '9999px',
                 border: 'none',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: 600,
+                boxShadow: '0 10px 30px rgba(34, 197, 94, 0.25)',
               }}
             >
-              Go to Homepage
+              Go to homepage
             </button>
           </div>
         </div>

@@ -26,9 +26,8 @@ ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own subscription" ON subscriptions
   FOR SELECT USING (auth.uid() = user_id);
 
--- Only service role can insert/update subscriptions (via webhooks)
-CREATE POLICY "Service role can manage subscriptions" ON subscriptions
-  FOR ALL USING (auth.role() = 'service_role');
+-- Note: Service role bypasses RLS, so it can insert/update without a policy
+-- Users cannot insert/update their own subscriptions (only service role via webhooks can)
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

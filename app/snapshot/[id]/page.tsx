@@ -106,6 +106,8 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
   const [generatingTask, setGeneratingTask] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [snapshotTasks, setSnapshotTasks] = useState<Task[]>([]);
+  const [projectSnapshots, setProjectSnapshots] = useState<Snapshot[]>([]);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
   
   const isProUser = subscription?.plan?.id === 'pro' || subscription?.plan?.id === 'team';
 
@@ -140,7 +142,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
         project_id: data.snapshot?.project_id,
       });
 
-      // Fetch project info for regeneration
+      // Fetch project info for regeneration and history
       if (data.snapshot?.project_id) {
         const projectResponse = await fetch(`/api/projects/${data.snapshot.project_id}`, {
           headers: session ? {
@@ -150,6 +152,17 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
         if (projectResponse.ok) {
           const projectData = await projectResponse.json();
           setProject(projectData.project);
+        }
+
+        // Fetch all snapshots for this project to power basic history/diff
+        const snapshotsResponse = await supabase
+          .from('snapshots')
+          .select('id, project_id, created_at')
+          .eq('project_id', data.snapshot.project_id)
+          .order('created_at', { ascending: false });
+
+        if (!snapshotsResponse.error && snapshotsResponse.data) {
+          setProjectSnapshots(snapshotsResponse.data as Snapshot[]);
         }
 
         // Fetch tasks for this snapshot
@@ -549,6 +562,34 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                   </span>
                 </div>
               )}
+
+              {projectSnapshots.length > 1 && (
+                <div className="mt-4">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">
+                    Compare with another snapshot
+                  </label>
+                  <select
+                    value={selectedSnapshotId || ''}
+                    onChange={(e) => setSelectedSnapshotId(e.target.value || null)}
+                    className="mt-1 block w-full max-w-xs rounded-md border border-gray-300 bg-white py-1.5 pl-3 pr-8 text-xs text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">Current snapshot only</option>
+                    {projectSnapshots
+                      .filter((s) => s.id !== snapshot.id)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {formatDate(s.created_at)} (#{s.id.slice(0, 6)})
+                        </option>
+                      ))}
+                  </select>
+                  {selectedSnapshotId && (
+                    <p className="mt-1 text-[11px] text-gray-500">
+                      This doesn&apos;t show a line-by-line diff, but lets you quickly open another
+                      snapshot for side-by-side comparison in a new tab.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
             
             {/* Action Buttons */}
@@ -608,6 +649,15 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                     </svg>
                     <span>{detectingDrift ? 'Detecting...' : 'Compare with Current'}</span>
                   </button>
+
+                  {selectedSnapshotId && (
+                    <a
+                      href={`/snapshot/${selectedSnapshotId}`}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm text-sm"
+                    >
+                      Open selected snapshot
+                    </a>
+                  )}
                 </>
               )}
 
