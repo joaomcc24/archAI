@@ -98,20 +98,39 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
         },
       });
 
+      const contentType = response.headers.get('content-type');
+      const isJson = contentType?.includes('application/json');
       const text = await response.text();
+
       if (!response.ok) {
         let message = 'Failed to load members';
-        try {
-          const data = JSON.parse(text) as { error?: string };
-          message = data.error || message;
-        } catch {
-          if (text) message = text.slice(0, 200);
+        if (isJson) {
+          try {
+            const data = JSON.parse(text) as { error?: string };
+            message = data.error || message;
+          } catch {
+            message = text ? text.slice(0, 200) : message;
+          }
+        } else {
+          message = `HTTP ${response.status}: ${response.statusText}`;
         }
         throw new Error(message);
       }
 
-      const data = JSON.parse(text) as { members?: ProjectMember[] };
-      setMembers(data.members || []);
+      if (!isJson) {
+        console.warn('Expected JSON but got', contentType);
+        setMembers([]);
+        return;
+      }
+
+      try {
+        const data = JSON.parse(text) as { members?: ProjectMember[] };
+        setMembers(data.members || []);
+      } catch (parseErr) {
+        console.error('Failed to parse members response:', parseErr);
+        setMembers([]);
+        throw new Error('Invalid response format');
+      }
     } catch (err) {
       console.error('Failed to fetch members:', err);
       setError(err instanceof Error ? err.message : 'Failed to load members');
@@ -134,23 +153,46 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
         },
       });
 
+      const contentType = response.headers.get('content-type');
+      const isJson = contentType?.includes('application/json');
       const text = await response.text();
+
       if (!response.ok) {
         let message = 'Failed to load invitations';
-        try {
-          const data = JSON.parse(text) as { error?: string };
-          message = data.error || message;
-        } catch {
-          if (text) message = text.slice(0, 200);
+        if (isJson) {
+          try {
+            const data = JSON.parse(text) as { error?: string };
+            message = data.error || message;
+          } catch {
+            // If JSON parse fails even though content-type says JSON, use raw text
+            message = text ? text.slice(0, 200) : message;
+          }
+        } else {
+          // HTML error page or other non-JSON response
+          message = `HTTP ${response.status}: ${response.statusText}`;
         }
         throw new Error(message);
       }
 
-      const data = JSON.parse(text) as { invitations?: ProjectInvitation[] };
-      setInvitations(data.invitations || []);
+      // Parse JSON only if content-type indicates JSON
+      if (!isJson) {
+        console.warn('Expected JSON but got', contentType);
+        setInvitations([]);
+        return;
+      }
+
+      try {
+        const data = JSON.parse(text) as { invitations?: ProjectInvitation[] };
+        setInvitations(data.invitations || []);
+      } catch (parseErr) {
+        console.error('Failed to parse invitations response:', parseErr);
+        setInvitations([]);
+      }
     } catch (err) {
       console.error('Failed to fetch invitations:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load invitations');
+      // Don't set error state for fetchInvitations failures - it's often called after mutations
+      // and we don't want to show errors for non-critical refetches
+      setInvitations([]);
     }
   };
 
