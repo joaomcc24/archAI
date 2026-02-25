@@ -1,7 +1,6 @@
 import Stripe from 'stripe';
 import { supabaseAdmin as supabase } from '../supabase-server';
 import { PLANS, SubscriptionPlan } from '../plans';
-import { appendFileSync } from 'fs';
 
 // Lazy initialize Stripe to avoid build-time errors
 let stripeInstance: Stripe | null = null;
@@ -117,19 +116,11 @@ export class BillingService {
     currentPeriodEnd: Date | null;
   }> {
     try {
-      // #region agent log
-      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:89',message:'Getting subscription',data:{userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
-      // #endregion
-
       const { data: subscription, error: queryError } = await supabase
         .from('subscriptions')
         .select('*')
         .eq('user_id', userId)
         .maybeSingle();
-
-      // #region agent log
-      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:96',message:'Subscription query result',data:{hasSubscription:!!subscription,status:subscription?.status,planId:subscription?.plan_id,queryError:queryError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
-      // #endregion
 
       if (queryError) {
         console.error('Error querying subscription:', queryError);
@@ -142,9 +133,6 @@ export class BillingService {
       }
 
       if (!subscription || subscription.status !== 'active') {
-        // #region agent log
-        try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:100',message:'Returning free plan',data:{planId:'free',limits:PLANS.free.limits},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
-        // #endregion
         return {
           plan: PLANS.free,
           status: 'free',
@@ -153,10 +141,6 @@ export class BillingService {
       }
 
       const plan = PLANS[subscription.plan_id] || PLANS.free;
-
-      // #region agent log
-      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:110',message:'Returning subscription plan',data:{planId:plan.id,limits:plan.limits},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
-      // #endregion
 
       return {
         plan,
@@ -270,22 +254,43 @@ export class BillingService {
     // Check if subscription already exists for this user
     const { data: existingSubscription } = await supabase
       .from('subscriptions')
-      .select('id')
+      .select('id, stripe_subscription_id, status')
       .eq('user_id', userId)
       .maybeSingle();
 
+    // If there was a previous Stripe subscription for this user, cancel it so
+    // only one active subscription exists per customer.
+    if (existingSubscription?.stripe_subscription_id && existingSubscription.stripe_subscription_id !== subscriptionId) {
+      try {
+        await getStripe().subscriptions.cancel(existingSubscription.stripe_subscription_id as string);
+        console.log('checkout.session.completed: Canceled previous subscription', {
+          userId,
+          previousSubscriptionId: existingSubscription.stripe_subscription_id,
+        });
+      } catch (cancelError) {
+        console.error('checkout.session.completed: Failed to cancel previous subscription', {
+          error: cancelError,
+          userId,
+          previousSubscriptionId: existingSubscription.stripe_subscription_id,
+        });
+      }
+    }
+
+    // Upsert local subscription record so we always keep a single row per user.
+    const upsertPayload = {
+      user_id: userId,
+      stripe_customer_id: session.customer as string,
+      stripe_subscription_id: subscriptionId,
+      plan_id: planId,
+      status: 'active',
+      current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+    };
+
     if (existingSubscription) {
-      // Update existing subscription
       const { error: updateError } = await supabase
         .from('subscriptions')
-        .update({
-          stripe_customer_id: session.customer as string,
-          stripe_subscription_id: subscriptionId,
-          plan_id: planId,
-          status: 'active',
-          current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-          current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-        })
+        .update(upsertPayload)
         .eq('user_id', userId);
 
       if (updateError) {
@@ -306,16 +311,7 @@ export class BillingService {
         priceId,
       });
     } else {
-      // Insert new subscription
-      const { error: insertError } = await supabase.from('subscriptions').insert({
-        user_id: userId,
-        stripe_customer_id: session.customer as string,
-        stripe_subscription_id: subscriptionId,
-        plan_id: planId,
-        status: 'active',
-        current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-        current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-      });
+      const { error: insertError } = await supabase.from('subscriptions').insert(upsertPayload);
 
       if (insertError) {
         console.error('checkout.session.completed: Failed to insert subscription', {
@@ -438,8 +434,14 @@ export class BillingService {
   }
 
   private async getPlanIdFromPriceId(priceId: string): Promise<string> {
-    const proPriceId = process.env.STRIPE_PRO_PRICE_ID || '';
-    const teamPriceId = process.env.STRIPE_TEAM_PRICE_ID || '';
+    const proPriceId =
+      process.env.STRIPE_PRO_PRICE_ID ||
+      process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID ||
+      '';
+    const teamPriceId =
+      process.env.STRIPE_TEAM_PRICE_ID ||
+      process.env.NEXT_PUBLIC_STRIPE_TEAM_PRICE_ID ||
+      '';
     
     const priceMap: Record<string, string> = {
       [proPriceId]: 'pro',
@@ -475,40 +477,22 @@ export class BillingService {
     userId: string,
     limitType: 'repos' | 'snapshots' | 'tasks'
   ): Promise<{ allowed: boolean; current: number; limit: number }> {
-    // #region agent log
-    try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:220',message:'checkLimit entry',data:{userId,limitType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})+'\n');}catch(e){}
-    // #endregion
-
     const { plan } = await this.getSubscription(userId);
     const limit = plan.limits[limitType];
 
-    // #region agent log
-    try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:225',message:'Plan and limit determined',data:{planId:plan.id,limit,limitType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})+'\n');}catch(e){}
-    // #endregion
-
     if (limit === -1) {
-      // #region agent log
-      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:228',message:'Unlimited limit - returning allowed',data:{limitType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');}catch(e){}
-      // #endregion
       return { allowed: true, current: 0, limit: -1 };
     }
 
     let current = 0;
 
     if (limitType === 'repos') {
-      // #region agent log
-      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:233',message:'Querying projects count',data:{userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n');}catch(e){}
-      // #endregion
       // Count only projects where user is owner (not shared projects they're a member of)
-      const { count, error } = await supabase
+      const { count } = await supabase
         .from('project_members')
         .select('project_id', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('role', 'owner');
-      
-      // #region agent log
-      try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:238',message:'Projects count result',data:{count:count||0,error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})+'\n');}catch(e){}
-      // #endregion
       
       current = count || 0;
     } else if (limitType === 'snapshots') {
@@ -560,11 +544,6 @@ export class BillingService {
     }
 
     const allowed = current < limit;
-    
-    // #region agent log
-    try{appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'lib/services/BillingService.ts:263',message:'checkLimit result',data:{allowed,current,limit,comparison:`${current} < ${limit} = ${allowed}`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,E'})+'\n');}catch(e){}
-    // #endregion
-
     return {
       allowed,
       current,

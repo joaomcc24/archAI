@@ -314,6 +314,20 @@ export class ProjectMembershipService {
   }
 
   /**
+   * Revoke invitation by token (used by invitee decline flow)
+   */
+  static async revokeInvitationByToken(token: string): Promise<void> {
+    const { error } = await supabase
+      .from('project_invitations')
+      .delete()
+      .eq('token', token);
+
+    if (error) {
+      throw new Error(`Failed to revoke invitation by token: ${error.message}`);
+    }
+  }
+
+  /**
    * Get pending invitations for a project
    */
   static async getPendingInvitations(projectId: string): Promise<ProjectInvitation[]> {
@@ -327,6 +341,26 @@ export class ProjectMembershipService {
 
     if (error) {
       throw new Error(`Failed to fetch invitations: ${error.message}`);
+    }
+
+    return data || [];
+  }
+
+  /**
+   * Get pending invitations for a user email
+   */
+  static async getPendingInvitationsForEmail(email: string): Promise<ProjectInvitation[]> {
+    const normalized = email.toLowerCase().trim();
+    const { data, error } = await supabase
+      .from('project_invitations')
+      .select('*')
+      .eq('email', normalized)
+      .is('accepted_at', null)
+      .gt('expires_at', new Date().toISOString())
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(`Failed to fetch invitations for email: ${error.message}`);
     }
 
     return data || [];

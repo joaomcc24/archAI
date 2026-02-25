@@ -1,16 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 
 export default function SignupPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const nextPathRaw = searchParams.get('next');
+  const nextPath = nextPathRaw && nextPathRaw.startsWith('/') ? nextPathRaw : '/dashboard';
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +29,7 @@ export default function SignupPage() {
 
       if (error) throw error;
 
-      router.push('/dashboard');
+      router.push(nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign up');
     } finally {
@@ -42,6 +46,9 @@ export default function SignupPage() {
         provider: 'github',
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            next: nextPath,
+          },
         },
       });
 
@@ -69,7 +76,7 @@ export default function SignupPage() {
             <h1 className="text-2xl font-bold text-slate-900">Create your account</h1>
             <p className="mt-2 text-slate-600">
               Already have an account?{' '}
-              <Link href="/login" className="text-slate-900 font-medium hover:underline">
+              <Link href={`/login${nextPath !== '/dashboard' ? `?next=${encodeURIComponent(nextPath)}` : ''}`} className="text-slate-900 font-medium hover:underline">
                 Sign in
               </Link>
             </p>

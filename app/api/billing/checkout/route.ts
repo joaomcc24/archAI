@@ -22,8 +22,22 @@ export async function POST(request: NextRequest) {
 
     const { priceId } = validation.data;
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const successUrl = `${baseUrl}/billing?success=true`;
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('NEXT_PUBLIC_APP_URL must be set in production for billing checkout redirects.');
+      } else {
+        console.warn(
+          'NEXT_PUBLIC_APP_URL is not set. Falling back to http://localhost:3000 for billing checkout URLs.'
+        );
+      }
+    }
+    const baseUrl = appUrl || 'http://localhost:3000';
+    const proPriceId = process.env.STRIPE_PRO_PRICE_ID || process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID || '';
+    const teamPriceId = process.env.STRIPE_TEAM_PRICE_ID || process.env.NEXT_PUBLIC_STRIPE_TEAM_PRICE_ID || '';
+    const planId = priceId === teamPriceId ? 'team' : priceId === proPriceId ? 'pro' : 'pro';
+
+    const successUrl = `${baseUrl}/billing?success=true&plan=${encodeURIComponent(planId)}`;
     const cancelUrl = `${baseUrl}/billing?canceled=true`;
 
     const checkoutUrl = await billingService.createCheckoutSession(

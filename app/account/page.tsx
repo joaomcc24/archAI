@@ -6,6 +6,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { AppTopBar } from '../../components/AppTopBar';
 import { getAnalyticsOptOut, setAnalyticsOptOut } from '../../lib/analytics';
 import { supabase } from '../../lib/supabase';
+import { ProtectedRoute } from '../../components/ProtectedRoute';
 
 export default function AccountPage() {
   const { user } = useAuth();
@@ -126,9 +127,10 @@ export default function AccountPage() {
   };
 
   return (
-    <div className="dashboard min-h-screen bg-gray-50">
-      <AppTopBar />
-      <div className="max-w-4xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+    <ProtectedRoute>
+      <div className="dashboard min-h-screen bg-gray-50">
+        <AppTopBar />
+        <div className="max-w-4xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
         <h1 className="text-3xl font-bold text-gray-900">Account Settings</h1>
         <p className="text-gray-600 mt-2">Manage identity, preferences, and privacy.</p>
 
@@ -297,6 +299,6 @@ export default function AccountPage() {
           </section>
         </div>
       </div>
-    </div>
+    </ProtectedRoute>
   );
 }

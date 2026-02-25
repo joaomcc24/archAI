@@ -93,3 +93,42 @@ export async function POST(
     );
   }
 }
+
+// DELETE /api/invitations/[token] - Decline invitation
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ token: string }> }
+) {
+  try {
+    const auth = await authenticateRequest(request);
+    if ('error' in auth) {
+      return auth.error;
+    }
+
+    const { token } = await params;
+    const invitation = await ProjectMembershipService.getInvitationByToken(token);
+    if (!invitation) {
+      return NextResponse.json(
+        { error: 'Invalid or expired invitation' },
+        { status: 404 }
+      );
+    }
+
+    if (auth.user.email.toLowerCase().trim() !== invitation.email.toLowerCase().trim()) {
+      return NextResponse.json(
+        { error: 'You can only decline invitations sent to your email' },
+        { status: 403 }
+      );
+    }
+
+    await ProjectMembershipService.revokeInvitationByToken(token);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error declining invitation:', error);
+    void captureException(error);
+    return NextResponse.json(
+      formatErrorResponse(error),
+      { status: error instanceof Error && 'statusCode' in error ? (error as any).statusCode : 500 }
+    );
+  }
+}

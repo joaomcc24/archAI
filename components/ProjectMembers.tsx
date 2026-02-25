@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,6 +36,20 @@ interface ProjectMembersProps {
   onClose?: () => void;
 }
 
+const isDev = process.env.NODE_ENV !== 'production';
+
+const logError = (...args: unknown[]) => {
+  if (isDev) {
+    console.error(...args);
+  }
+};
+
+const logWarn = (...args: unknown[]) => {
+  if (isDev) {
+    console.warn(...args);
+  }
+};
+
 export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersProps) {
   const { user } = useAuth();
   const { theme } = useTheme();
@@ -48,21 +62,12 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
   const [error, setError] = useState<string | null>(null);
   const [canShare, setCanShare] = useState(false);
   const [lastInviteLink, setLastInviteLink] = useState<string | null>(null);
-  const [lastInvitedEmail, setLastInvitedEmail] = useState<string | null>(null);
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
 
   const isOwner = userRole === 'owner';
   const isDark = theme === 'dark';
 
-  useEffect(() => {
-    if (projectId) {
-      fetchMembers();
-      fetchInvitations();
-      checkCanShare();
-    }
-  }, [projectId]);
-
-  const checkCanShare = async () => {
+  const checkCanShare = useCallback(async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
@@ -78,14 +83,14 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
         // The API returns { subscription: { plan: { id: ... } } }
         setCanShare(data.subscription?.plan?.id === 'team');
       } else {
-        console.error('Failed to fetch subscription:', response.status, await response.text());
+        logError('Failed to fetch subscription:', response.status, await response.text());
       }
     } catch (err) {
-      console.error('Failed to check sharing capability:', err);
+      logError('Failed to check sharing capability:', err);
     }
-  };
+  }, []);
 
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -118,7 +123,7 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
       }
 
       if (!isJson) {
-        console.warn('Expected JSON but got', contentType);
+        logWarn('Expected JSON but got', contentType);
         setMembers([]);
         return;
       }
@@ -127,19 +132,19 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
         const data = JSON.parse(text) as { members?: ProjectMember[] };
         setMembers(data.members || []);
       } catch (parseErr) {
-        console.error('Failed to parse members response:', parseErr);
+        logError('Failed to parse members response:', parseErr);
         setMembers([]);
         throw new Error('Invalid response format');
       }
     } catch (err) {
-      console.error('Failed to fetch members:', err);
+      logError('Failed to fetch members:', err);
       setError(err instanceof Error ? err.message : 'Failed to load members');
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
-  const fetchInvitations = async () => {
+  const fetchInvitations = useCallback(async () => {
     if (!isOwner) return;
 
     try {
@@ -176,7 +181,7 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
 
       // Parse JSON only if content-type indicates JSON
       if (!isJson) {
-        console.warn('Expected JSON but got', contentType);
+        logWarn('Expected JSON but got', contentType);
         setInvitations([]);
         return;
       }
@@ -185,16 +190,16 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
         const data = JSON.parse(text) as { invitations?: ProjectInvitation[] };
         setInvitations(data.invitations || []);
       } catch (parseErr) {
-        console.error('Failed to parse invitations response:', parseErr);
+        logError('Failed to parse invitations response:', parseErr);
         setInvitations([]);
       }
     } catch (err) {
-      console.error('Failed to fetch invitations:', err);
+      logError('Failed to fetch invitations:', err);
       // Don't set error state for fetchInvitations failures - it's often called after mutations
       // and we don't want to show errors for non-critical refetches
       setInvitations([]);
     }
-  };
+  }, [isOwner, projectId]);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,10 +240,8 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
 
       const data = JSON.parse(text) as { invitation?: { token?: string } };
       const token = data.invitation?.token;
-      const emailed = inviteEmail.trim();
       if (token && typeof window !== 'undefined') {
         setLastInviteLink(`${window.location.origin}/invitations/${token}`);
-        setLastInvitedEmail(emailed);
       }
       setInviteEmail("");
       await fetchInvitations();
@@ -248,6 +251,14 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
       setInviting(false);
     }
   };
+
+  useEffect(() => {
+    if (projectId) {
+      void fetchMembers();
+      void fetchInvitations();
+      void checkCanShare();
+    }
+  }, [projectId, fetchMembers, fetchInvitations, checkCanShare]);
 
   const handleRemoveMember = async (userId: string) => {
     if (!confirm('Are you sure you want to remove this member?')) return;
@@ -299,7 +310,6 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
       }
 
       setLastInviteLink(null);
-      setLastInvitedEmail(null);
       await fetchInvitations();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to revoke invitation');
@@ -315,16 +325,6 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
     } catch {
       setError('Could not copy to clipboard');
     }
-  };
-
-  const sendInviteEmail = () => {
-    if (!lastInviteLink) return;
-    const to = lastInvitedEmail || '';
-    const subject = encodeURIComponent('Invitation to collaborate on a RepoLens project');
-    const body = encodeURIComponent(
-      `You've been invited to collaborate on a project in RepoLens.\n\nOpen this link to accept the invitation:\n${lastInviteLink}`
-    );
-    window.location.href = `mailto:${to ? `?to=${encodeURIComponent(to)}&` : '?'}subject=${subject}&body=${body}`;
   };
 
   const handleUpdateRole = async (userId: string, newRole: 'member' | 'viewer') => {
@@ -407,7 +407,7 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
               isDark ? 'text-emerald-200' : 'text-emerald-800'
             }`}
           >
-            Invitation created. Share this link with the invitee:
+            Invitation email sent successfully. You can still copy the link below if needed:
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <code
@@ -419,17 +419,19 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
             >
               {lastInviteLink}
             </code>
-            <Button type="button" variant="secondary" size="sm" onClick={copyInviteLink}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={copyInviteLink}
+              aria-label="Copy invitation link to clipboard"
+            >
               {inviteLinkCopied ? 'Copied!' : 'Copy link'}
-            </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={sendInviteEmail}>
-              Send email
             </Button>
             <button
               type="button"
               onClick={() => {
                 setLastInviteLink(null);
-                setLastInvitedEmail(null);
               }}
               className={`text-xs hover:underline ${
                 isDark ? 'text-emerald-300 hover:text-emerald-200' : 'text-emerald-700 hover:text-emerald-800'
@@ -476,6 +478,7 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
                     value={member.role}
                     onChange={(e) => handleUpdateRole(member.user_id, e.target.value as 'member' | 'viewer')}
                     className="text-sm border border-gray-300 rounded px-2 py-1"
+                    aria-label="Change member role"
                   >
                     <option value="member">Member</option>
                     <option value="viewer">Viewer</option>
@@ -520,6 +523,7 @@ export function ProjectMembers({ projectId, userRole, onClose }: ProjectMembersP
                   onChange={(e) => setInviteRole(e.target.value as 'member' | 'viewer')}
                   className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-slate-500 disabled:bg-gray-50 disabled:text-gray-500"
                   disabled={inviting}
+                  aria-label="Select invitation role"
                 >
                   <option value="member">Member</option>
                   <option value="viewer">Viewer</option>

@@ -55,6 +55,14 @@ interface ProjectWithSnapshots extends Project {
   memberCount?: number;
 }
 
+const isDev = process.env.NODE_ENV !== "production";
+
+const logError = (...args: unknown[]) => {
+  if (isDev) {
+    console.error(...args);
+  }
+};
+
 function DashboardContent() {
   const { user } = useAuth();
   const [projects, setProjects] = useState<ProjectWithSnapshots[]>([]);
@@ -78,21 +86,21 @@ function DashboardContent() {
       
       if (!response.ok) {
         const text = await response.text();
-        console.error('Failed to fetch tasks:', response.status, text);
+        logError('Failed to fetch tasks:', response.status, text);
         return;
       }
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         const text = await response.text();
-        console.error('Expected JSON but got:', contentType, text.substring(0, 100));
+        logError('Expected JSON but got:', contentType, text.substring(0, 100));
         return;
       }
 
       const data = await response.json();
       setTasks(data.tasks || []);
     } catch (err) {
-      console.error('Failed to fetch tasks:', err);
+      logError('Failed to fetch tasks:', err);
     }
   }, []);
 
@@ -467,9 +475,10 @@ function DashboardContent() {
                         </div>
                         <Button
                           className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 shadow-sm"
-                          onClick={() => {
-                            window.location.href = `/snapshot/${project.latestSnapshot!.id}`;
-                          }}
+                        onClick={() => {
+                          window.location.href = `/snapshot/${project.latestSnapshot!.id}`;
+                        }}
+                        aria-label={`View latest snapshot for ${project.repo_name}`}
                         >
                           View
                         </Button>
@@ -506,6 +515,7 @@ function DashboardContent() {
                           window.open(`https://github.com/${project.repo_name}`, '_blank');
                         }}
                         disabled={deleting[project.id]}
+                        aria-label={`Open ${project.repo_name} on GitHub`}
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -565,6 +575,7 @@ function DashboardContent() {
                     <button
                       onClick={() => setSharingProject(null)}
                       className="text-gray-400 hover:text-gray-600"
+                      aria-label="Close project members dialog"
                     >
                       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -634,6 +645,7 @@ function DashboardContent() {
                               <button
                                 onClick={() => window.location.href = `/task/${task.id}`}
                                 className="text-blue-600 hover:text-blue-700 font-medium"
+                                aria-label={`View task ${task.title}`}
                               >
                                 View →
                               </button>

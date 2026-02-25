@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 interface Invitation {
   id: string;
@@ -58,7 +57,7 @@ function InvitationPageContent({ params }: { params: Promise<{ token: string }> 
 
   const handleAccept = async () => {
     if (!user || !token) {
-      router.push('/login');
+      router.push(`/login?next=${encodeURIComponent(`/invitations/${token || ''}`)}`);
       return;
     }
 
@@ -68,7 +67,7 @@ function InvitationPageContent({ params }: { params: Promise<{ token: string }> 
 
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        router.push('/login');
+        router.push(`/login?next=${encodeURIComponent(`/invitations/${token}`)}`);
         return;
       }
 
@@ -147,9 +146,8 @@ function InvitationPageContent({ params }: { params: Promise<{ token: string }> 
   const emailMatches = user?.email?.toLowerCase().trim() === invitation.email.toLowerCase().trim();
 
   return (
-    <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg p-8">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
               {error}
@@ -240,7 +238,13 @@ function InvitationPageContent({ params }: { params: Promise<{ token: string }> 
                 </div>
               </div>
 
-              {!emailMatches && (
+              {!user && (
+                <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg mb-6">
+                  Sign in with GitHub (or email) to accept this invitation.
+                </div>
+              )}
+
+              {user && !emailMatches && (
                 <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg mb-6">
                   This invitation was sent to <strong>{invitation.email}</strong>. Please sign in with that email address to accept.
                 </div>
@@ -249,25 +253,44 @@ function InvitationPageContent({ params }: { params: Promise<{ token: string }> 
               <div className="flex gap-3">
                 <Button
                   variant="secondary"
-                  onClick={() => router.push('/dashboard')}
+                  onClick={() => {
+                    if (!token) {
+                      router.push('/dashboard');
+                      return;
+                    }
+                    if (!user) {
+                      router.push(`/login?next=${encodeURIComponent(`/invitations/${token}`)}`);
+                      return;
+                    }
+                    void (async () => {
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (!session) return;
+                      await fetch(`/api/invitations/${token}`, {
+                        method: 'DELETE',
+                        headers: {
+                          Authorization: `Bearer ${session.access_token}`,
+                        },
+                      });
+                      router.push('/dashboard');
+                    })();
+                  }}
                   className="flex-1"
                   disabled={accepting}
                 >
-                  Decline
+                  {user ? 'Decline' : 'Sign in'}
                 </Button>
                 <Button
                   onClick={handleAccept}
                   className="flex-1"
-                  disabled={accepting || !emailMatches}
+                  disabled={accepting || (Boolean(user) && !emailMatches)}
                 >
-                  {accepting ? 'Accepting...' : 'Accept Invitation'}
+                  {accepting ? 'Accepting...' : user ? 'Accept Invitation' : 'Sign in to Accept'}
                 </Button>
               </div>
             </>
           )}
         </div>
       </div>
-    </ProtectedRoute>
   );
 }
 

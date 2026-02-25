@@ -8,13 +8,20 @@ function getSupabaseAdmin(): SupabaseClient {
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase environment variables. Need NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  if (!supabaseUrl) {
+    throw new Error('Missing Supabase environment variable NEXT_PUBLIC_SUPABASE_URL for server-side client.');
   }
 
-  supabaseInstance = createClient(supabaseUrl, supabaseKey);
+  if (!serviceRoleKey) {
+    throw new Error(
+      'Missing Supabase environment variable SUPABASE_SERVICE_ROLE_KEY. ' +
+        'Server-side admin operations require the service role key and must not fall back to the anon key.'
+    );
+  }
+
+  supabaseInstance = createClient(supabaseUrl, serviceRoleKey);
   return supabaseInstance;
 }
 

@@ -35,7 +35,7 @@ export async function GET(
     if (!project) {
       return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
-    const access = await checkProjectAccess(request, project.id, 'viewer');
+    const access = await checkProjectAccess(request, project.id, 'member');
     if ('error' in access) {
       return access.error;
     }

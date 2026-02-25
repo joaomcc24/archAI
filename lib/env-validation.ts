@@ -18,6 +18,18 @@ interface EnvConfig {
   STRIPE_TEAM_PRICE_ID?: string;
   NEXT_PUBLIC_STRIPE_PRO_PRICE_ID?: string;
   NEXT_PUBLIC_STRIPE_TEAM_PRICE_ID?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_WEBHOOK_SECRET_CLI?: string;
+
+  // GitHub OAuth
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  GITHUB_REDIRECT_URI?: string;
+
+  // Email (Resend)
+  RESEND_API_KEY?: string;
+  INVITATION_EMAIL_FROM?: string;
+  RESEND_FROM_EMAIL?: string;
   
   // PostHog (optional)
   NEXT_PUBLIC_POSTHOG_KEY?: string;
@@ -36,11 +48,6 @@ const requiredEnvVars = [
   'SUPABASE_SERVICE_ROLE_KEY',
 ] as const;
 
-const recommendedEnvVars = [
-  'OPENAI_API_KEY',
-  'STRIPE_SECRET_KEY',
-] as const;
-
 export function validateEnv(): { valid: boolean; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -53,10 +60,12 @@ export function validateEnv(): { valid: boolean; errors: string[]; warnings: str
   }
 
   // Check recommended variables
-  for (const varName of recommendedEnvVars) {
-    if (!process.env[varName]) {
-      warnings.push(`Missing recommended environment variable: ${varName}`);
-    }
+  if (!process.env.OPENAI_API_KEY && !process.env.GROQ_API_KEY && !process.env.OLLAMA_BASE_URL) {
+    warnings.push('No LLM provider API key configured. Some AI features may not work.');
+  }
+
+  if (!process.env.STRIPE_SECRET_KEY) {
+    warnings.push('STRIPE_SECRET_KEY is not set. Billing and subscriptions will be disabled.');
   }
 
   // Check LLM provider configuration
@@ -76,6 +85,33 @@ export function validateEnv(): { valid: boolean; errors: string[]; warnings: str
     }
     if (!process.env.STRIPE_TEAM_PRICE_ID && !process.env.NEXT_PUBLIC_STRIPE_TEAM_PRICE_ID) {
       warnings.push('Stripe Team price ID not configured. Billing features may not work correctly.');
+    }
+
+    if (!process.env.STRIPE_WEBHOOK_SECRET && !process.env.STRIPE_WEBHOOK_SECRET_CLI) {
+      warnings.push('Stripe webhook secret (STRIPE_WEBHOOK_SECRET or STRIPE_WEBHOOK_SECRET_CLI) is not configured. Webhook events will fail verification.');
+    }
+  }
+
+  // App URL (required in production for correct redirects)
+  if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_APP_URL) {
+    errors.push('NEXT_PUBLIC_APP_URL is required in production for correct redirect URLs.');
+  } else if (!process.env.NEXT_PUBLIC_APP_URL) {
+    warnings.push(
+      'NEXT_PUBLIC_APP_URL is not set. Falling back to http://localhost:3000 in some routes. Configure it to match your deployed URL.'
+    );
+  }
+
+  // GitHub OAuth configuration
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET || !process.env.GITHUB_REDIRECT_URI) {
+    warnings.push('GitHub OAuth variables (GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URI) are not fully configured. GitHub login may not work.');
+  }
+
+  // Resend / email configuration
+  if (!process.env.RESEND_API_KEY) {
+    warnings.push('RESEND_API_KEY is not set. Transactional emails (e.g., invitations, password reset) will not be sent.');
+  } else {
+    if (!process.env.INVITATION_EMAIL_FROM && !process.env.RESEND_FROM_EMAIL) {
+      warnings.push('INVITATION_EMAIL_FROM or RESEND_FROM_EMAIL is not set. Resend emails will not have a configured "from" address.');
     }
   }
 
@@ -100,6 +136,14 @@ export function getEnvConfig(): EnvConfig {
     STRIPE_TEAM_PRICE_ID: process.env.STRIPE_TEAM_PRICE_ID,
     NEXT_PUBLIC_STRIPE_PRO_PRICE_ID: process.env.NEXT_PUBLIC_STRIPE_PRO_PRICE_ID,
     NEXT_PUBLIC_STRIPE_TEAM_PRICE_ID: process.env.NEXT_PUBLIC_STRIPE_TEAM_PRICE_ID,
+    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+    STRIPE_WEBHOOK_SECRET_CLI: process.env.STRIPE_WEBHOOK_SECRET_CLI,
+    GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
+    GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
+    GITHUB_REDIRECT_URI: process.env.GITHUB_REDIRECT_URI,
+    RESEND_API_KEY: process.env.RESEND_API_KEY,
+    INVITATION_EMAIL_FROM: process.env.INVITATION_EMAIL_FROM,
+    RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL,
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY,
     NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,

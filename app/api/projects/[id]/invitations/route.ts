@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkProjectOwner } from '@/lib/auth-project';
 import { ProjectMembershipService } from '@/lib/services/ProjectMembershipService';
 import { BillingService } from '@/lib/services/BillingService';
+import { ProjectService } from '@/lib/services/ProjectService';
+import { sendProjectInvitationEmail } from '@/lib/email/invitation-email';
 import { formatErrorResponse } from '@/lib/errors';
 import { trackServerEvent, AnalyticsEvents } from '@/lib/analytics-server';
 import { captureException } from '@/lib/monitoring';
@@ -86,6 +88,14 @@ export async function POST(
       }
     }
 
+    const project = await ProjectService.getProjectById(projectId);
+    if (!project) {
+      return NextResponse.json(
+        { error: 'Project not found' },
+        { status: 404 }
+      );
+    }
+
     // Create invitation
     const invitation = await ProjectMembershipService.createInvitation(
       projectId,
@@ -93,6 +103,24 @@ export async function POST(
       role,
       owner.id
     );
+
+    const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || request.nextUrl.origin;
+    const inviteLink = `${appBaseUrl.replace(/\/$/, '')}/invitations/${invitation.token}`;
+
+    try {
+      await sendProjectInvitationEmail({
+        toEmail: invitation.email,
+        inviterEmail: owner.email,
+        projectName: project.repo_name,
+        role: invitation.role,
+        inviteLink,
+        expiresAt: invitation.expires_at,
+      });
+    } catch (emailError) {
+      // Keep DB and user state consistent: if email fails, remove pending invitation
+      await ProjectMembershipService.revokeInvitation(invitation.id);
+      throw emailError;
+    }
 
     // Track analytics
     void trackServerEvent(AnalyticsEvents.INVITATION_SENT, {

@@ -20,7 +20,9 @@ export async function POST(request: NextRequest) {
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || process.env.STRIPE_WEBHOOK_SECRET_CLI;
 
   if (!webhookSecret) {
-    console.error('Stripe webhook secret not configured. Set STRIPE_WEBHOOK_SECRET or STRIPE_WEBHOOK_SECRET_CLI');
+    console.error(
+      'Stripe webhook secret not configured. Set STRIPE_WEBHOOK_SECRET or STRIPE_WEBHOOK_SECRET_CLI'
+    );
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
   }
 
@@ -28,34 +30,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
   }
 
+  const isDev = process.env.NODE_ENV !== 'production';
   let event: Stripe.Event | null = null;
   
   try {
     const body = await request.text();
     
-    // Log webhook attempt for debugging
-    console.log('Webhook received:', {
-      hasSignature: !!sig,
-      signatureLength: sig?.length,
-      bodyLength: body.length,
-      webhookSecretSet: !!webhookSecret,
-      webhookSecretPrefix: webhookSecret?.substring(0, 10),
-    });
+    // Log webhook attempt for debugging (non-production only)
+    if (isDev) {
+      console.log('Webhook received:', {
+        hasSignature: !!sig,
+        signatureLength: sig?.length,
+        bodyLength: body.length,
+        webhookSecretSet: !!webhookSecret,
+      });
+    }
     
     try {
       event = getStripe().webhooks.constructEvent(body, sig, webhookSecret);
     } catch (constructError) {
       // More detailed error for signature verification failures
       const errorMessage = constructError instanceof Error ? constructError.message : 'Unknown error';
-      console.error('Webhook signature verification failed:', {
-        error: errorMessage,
-        signatureProvided: !!sig,
-        webhookSecretProvided: !!webhookSecret,
-        bodyPreview: body.substring(0, 100),
-      });
+      if (isDev) {
+        console.error('Webhook signature verification failed:', {
+          error: errorMessage,
+          signatureProvided: !!sig,
+          webhookSecretProvided: !!webhookSecret,
+          bodyPreview: body.substring(0, 100),
+        });
+      } else {
+        console.error('Webhook signature verification failed:', errorMessage);
+      }
       
       // If using Stripe CLI, the secret might be different
-      if (errorMessage.includes('signature') || errorMessage.includes('No signatures found')) {
+      if (isDev && (errorMessage.includes('signature') || errorMessage.includes('No signatures found'))) {
         console.error('Signature verification failed. Make sure you are using the correct webhook secret:');
         console.error('- For Stripe CLI: Use the secret from `stripe listen` command (starts with whsec_)');
         console.error('- For production: Use the webhook secret from Stripe Dashboard');
@@ -64,11 +72,15 @@ export async function POST(request: NextRequest) {
       throw constructError;
     }
     
-    console.log(`Processing webhook: ${event.type} (${event.id})`);
+    if (isDev) {
+      console.log(`Processing webhook: ${event.type} (${event.id})`);
+    }
     
     await billingService.handleWebhook(event);
     
-    console.log(`Successfully processed webhook: ${event.type}`);
+    if (isDev) {
+      console.log(`Successfully processed webhook: ${event.type}`);
+    }
     return NextResponse.json({ received: true });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';

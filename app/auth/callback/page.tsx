@@ -10,6 +10,8 @@ function AuthCallbackContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState('Completing sign in...');
   const [error, setError] = useState<string | null>(null);
+  const nextRaw = searchParams.get('next');
+  const nextPath = nextRaw && nextRaw.startsWith('/') ? nextRaw : '/dashboard';
 
   useEffect(() => {
     // Check for error in URL query params
@@ -28,12 +30,12 @@ function AuthCallbackContent() {
     }
 
     // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth event:', event, session?.user?.email);
-      
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        setStatus('Redirecting to dashboard...');
-        router.replace('/dashboard');
+        setStatus('Redirecting...');
+        router.replace(nextPath);
       }
     });
 
@@ -41,15 +43,15 @@ function AuthCallbackContent() {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        setStatus('Redirecting to dashboard...');
-        router.replace('/dashboard');
+        setStatus('Redirecting...');
+        router.replace(nextPath);
       }
     };
     
     setTimeout(checkSession, 500);
 
     return () => subscription.unsubscribe();
-  }, [router, searchParams]);
+  }, [router, searchParams, nextPath]);
 
   if (error) {
     return (

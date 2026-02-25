@@ -598,6 +598,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                 onClick={handleCopyAll}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
                 title="Copy markdown to clipboard"
+                aria-label={copied ? 'Markdown copied to clipboard' : 'Copy markdown to clipboard'}
               >
                 {copied ? <CheckIcon className="w-5 h-5 text-green-600" /> : <CopyIcon className="w-5 h-5" />}
                 <span>{copied ? 'Copied!' : 'Copy'}</span>
@@ -607,6 +608,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                 onClick={handleDownload}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
                 title="Download as markdown file"
+                aria-label="Download snapshot as markdown file"
               >
                 <DownloadIcon className="w-5 h-5" />
                 <span>Download</span>
@@ -618,6 +620,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                   disabled={exportingPdf}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Export as PDF (Pro feature)"
+                  aria-label={exportingPdf ? 'Exporting snapshot as PDF' : 'Export snapshot as PDF'}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -633,6 +636,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                     disabled={regenerating}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Regenerate architecture documentation"
+                    aria-label={regenerating ? 'Regenerating architecture documentation' : 'Regenerate architecture documentation'}
                   >
                     <RefreshIcon className={`w-5 h-5 ${regenerating ? 'animate-spin' : ''}`} />
                     <span>{regenerating ? 'Regenerating...' : 'Regenerate'}</span>
@@ -643,6 +647,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                     disabled={detectingDrift}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Compare this snapshot with current repository state"
+                    aria-label={detectingDrift ? 'Detecting architecture drift' : 'Compare this snapshot with current repository state'}
                   >
                     <svg className={`w-5 h-5 ${detectingDrift ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -654,6 +659,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                     <a
                       href={`/snapshot/${selectedSnapshotId}`}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm text-sm"
+                      aria-label="Open selected snapshot in a new page"
                     >
                       Open selected snapshot
                     </a>
@@ -665,6 +671,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                 onClick={() => setShowTaskModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
                 title="Generate implementation task from feature description"
+                aria-label="Open generate task dialog"
               >
                 <TaskIcon className="w-5 h-5" />
                 <span>Generate Task</span>
@@ -673,6 +680,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
               <button
                 onClick={() => window.location.href = '/dashboard'}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors shadow-sm"
+                aria-label="Back to dashboard"
               >
                 ← Dashboard
               </button>
@@ -734,6 +742,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                           onClick={() => handleCopyCodeBlock(codeString, blockId)}
                           className="p-2 bg-gray-700 hover:bg-gray-600 rounded-md transition-colors opacity-0 group-hover:opacity-100"
                           title="Copy code"
+                          aria-label="Copy code block to clipboard"
                         >
                           {copiedCodeBlock === blockId ? (
                             <CheckIcon className="w-4 h-4 text-green-400" />
@@ -830,6 +839,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                   setTaskError(null);
                 }}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Close generate task dialog"
               >
                 <CloseIcon className="w-5 h-5 text-gray-500" />
               </button>
@@ -878,6 +888,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
                 }}
                 className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
                 disabled={generatingTask}
+                aria-label="Cancel task generation"
               >
                 Cancel
               </button>

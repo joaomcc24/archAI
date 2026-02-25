@@ -8,7 +8,17 @@ export async function POST(request: NextRequest) {
     const auth = await authenticateRequest(request);
     if ('error' in auth) return auth.error;
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('NEXT_PUBLIC_APP_URL must be set in production for billing portal redirects.');
+      } else {
+        console.warn(
+          'NEXT_PUBLIC_APP_URL is not set. Falling back to http://localhost:3000 for billing portal return URLs.'
+        );
+      }
+    }
+    const baseUrl = appUrl || 'http://localhost:3000';
     const returnUrl = `${baseUrl}/billing`;
 
     const portalUrl = await billingService.createPortalSession(auth.user.id, returnUrl);

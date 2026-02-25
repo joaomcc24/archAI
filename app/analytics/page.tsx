@@ -357,7 +357,7 @@ function AnalyticsContent() {
               <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
               <p className="text-gray-600 mt-1">Track your usage and activity</p>
             </div>
-            <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-1">
+            <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-1" role="group" aria-label="Select analytics period">
               {(['week', 'month', 'year'] as const).map((period) => (
                 <button
                   key={period}
@@ -367,6 +367,7 @@ function AnalyticsContent() {
                       ? 'bg-gray-900 text-white'
                       : 'text-gray-600 hover:text-gray-900'
                   }`}
+                  aria-pressed={selectedPeriod === period}
                 >
                   {period.charAt(0).toUpperCase() + period.slice(1)}
                 </button>

@@ -6,6 +6,7 @@ import { useBilling } from '../../contexts/BillingContext';
 import { useAuth } from '../../contexts/AuthContext';
 import Link from 'next/link';
 import { AppTopBar } from '../../components/AppTopBar';
+import { ProtectedRoute } from '../../components/ProtectedRoute';
 
 function BillingPageContent() {
   const { user, loading: authLoading } = useAuth();
@@ -21,11 +22,21 @@ function BillingPageContent() {
   const searchParams = useSearchParams();
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [requestedPlanId, setRequestedPlanId] = useState<string | null>(null);
+
+  const formatPlanName = (planId: string | null): string | null => {
+    if (!planId) return null;
+    if (planId === 'pro') return 'Pro';
+    if (planId === 'team') return 'Team';
+    if (planId === 'free') return 'Free';
+    return planId.charAt(0).toUpperCase() + planId.slice(1);
+  };
 
   // Handle success redirect
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
       setShowSuccessMessage(true);
+      setRequestedPlanId(searchParams.get('plan'));
       refreshSubscription();
     } else if (searchParams.get('canceled') === 'true') {
       setMessage({ type: 'error', text: 'Checkout canceled. You can try again anytime.' });
@@ -35,11 +46,12 @@ function BillingPageContent() {
   // Show success message once subscription is loaded/updated
   useEffect(() => {
     if (showSuccessMessage && subscription?.plan) {
-      const planName = subscription.plan.name;
+      const planName = formatPlanName(requestedPlanId) || subscription.plan.name;
       setMessage({ type: 'success', text: `Subscription successful! Welcome to ${planName}.` });
       setShowSuccessMessage(false);
+      setRequestedPlanId(null);
     }
-  }, [showSuccessMessage, subscription]);
+  }, [showSuccessMessage, subscription, requestedPlanId]);
 
   if (authLoading || billingLoading) {
     return (
@@ -125,6 +137,7 @@ function BillingPageContent() {
                   color: 'var(--dash-text)',
                   borderColor: 'var(--dash-outline)',
                 }}
+                aria-label="Open Stripe customer portal to manage your subscription"
               >
                 Manage Subscription
               </button>
@@ -183,19 +196,23 @@ function BillingPageContent() {
 
 export default function BillingPage() {
   return (
-    <Suspense fallback={
-      <div className="dashboard min-h-screen bg-gray-50">
-        <AppTopBar />
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-            <p className="mt-4 text-gray-600">Loading...</p>
+    <ProtectedRoute>
+      <Suspense
+        fallback={
+          <div className="dashboard min-h-screen bg-gray-50">
+            <AppTopBar />
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                <p className="mt-4 text-gray-600">Loading...</p>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-    }>
-      <BillingPageContent />
-    </Suspense>
+        }
+      >
+        <BillingPageContent />
+      </Suspense>
+    </ProtectedRoute>
   );
 }
 
@@ -292,6 +309,13 @@ function PlanCard({
             ? 'bg-blue-600 text-white hover:bg-blue-700'
             : 'bg-gray-900 text-white hover:bg-gray-800'
         }`}
+        aria-label={
+          isCurrentPlan
+            ? `${plan.name} is your current plan`
+            : plan.id === 'free'
+            ? 'Free plan is already active'
+            : `Upgrade to the ${plan.name} plan`
+        }
       >
         {isCurrentPlan ? 'Current Plan' : plan.id === 'free' ? 'Free Forever' : 'Upgrade Now'}
       </button>

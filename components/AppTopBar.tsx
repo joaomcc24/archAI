@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { supabase } from '../lib/supabase';
 
 const navLinks = [
   {
@@ -38,13 +39,26 @@ const navLinks = [
 ];
 
 export function AppTopBar() {
+  const router = useRouter();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const linkRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
+  const [loadingInvitations, setLoadingInvitations] = useState(false);
+  const [invitationError, setInvitationError] = useState<string | null>(null);
+  const [pendingInvitations, setPendingInvitations] = useState<Array<{
+    id: string;
+    token: string;
+    project_id: string;
+    project_name: string;
+    role: 'member' | 'viewer';
+    expires_at: string;
+  }>>([]);
 
   const activeIndex = useMemo(() => {
     return Math.max(
@@ -67,15 +81,130 @@ export function AppTopBar() {
   }, [activeIndex]);
 
   useEffect(() => {
+    if (!user) {
+      setPendingInvitations([]);
+      return;
+    }
+
+    const fetchPendingInvitations = async () => {
+      try {
+        setLoadingInvitations(true);
+        setInvitationError(null);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        const response = await fetch('/api/invitations', {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        const text = await response.text();
+        if (!response.ok) {
+          throw new Error(`Failed to load invitations: ${response.status}`);
+        }
+        const payload = JSON.parse(text) as { invitations?: Array<{
+          id: string;
+          token: string;
+          project_id: string;
+          project_name: string;
+          role: 'member' | 'viewer';
+          expires_at: string;
+        }> };
+
+        setPendingInvitations(payload.invitations || []);
+      } catch (error) {
+        setInvitationError(error instanceof Error ? error.message : 'Failed to load invitations');
+      } finally {
+        setLoadingInvitations(false);
+      }
+    };
+
+    void fetchPendingInvitations();
+  }, [user]);
+
+  useEffect(() => {
     const onClick = (event: MouseEvent) => {
-      if (!menuRef.current) return;
-      if (!menuRef.current.contains(event.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
+      }
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
       }
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+
+  const refreshInvitations = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const response = await fetch('/api/invitations', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      if (!response.ok) return;
+      const payload = await response.json() as { invitations?: Array<{
+        id: string;
+        token: string;
+        project_id: string;
+        project_name: string;
+        role: 'member' | 'viewer';
+        expires_at: string;
+      }> };
+      setPendingInvitations(payload.invitations || []);
+    } catch {
+      // non-blocking UI refresh
+    }
+  };
+
+  const handleAcceptInvitation = async (token: string, projectId: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+
+      const response = await fetch(`/api/invitations/${token}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to accept invitation');
+      }
+
+      await refreshInvitations();
+      setNotificationsOpen(false);
+      router.push(`/projects/${projectId}/drift`);
+    } catch (error) {
+      setInvitationError(error instanceof Error ? error.message : 'Failed to accept invitation');
+    }
+  };
+
+  const handleDeclineInvitation = async (token: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(`/api/invitations/${token}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to decline invitation');
+      }
+      await refreshInvitations();
+    } catch (error) {
+      setInvitationError(error instanceof Error ? error.message : 'Failed to decline invitation');
+    }
+  };
 
   return (
     <div className="app-topbar">
@@ -145,6 +274,73 @@ export function AppTopBar() {
             </button>
           </div>
 
+          <div className="relative" ref={notificationsRef}>
+            <button
+              type="button"
+              onClick={() => setNotificationsOpen((open) => !open)}
+              className="relative inline-flex items-center justify-center w-10 h-10 rounded-full border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
+              aria-label="Notifications"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0a3 3 0 11-6 0m6 0H9" />
+              </svg>
+              {pendingInvitations.length > 0 && (
+                <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full text-[10px] font-bold bg-red-500 text-white">
+                  {pendingInvitations.length}
+                </span>
+              )}
+            </button>
+
+            {notificationsOpen && (
+              <div className="absolute right-0 mt-2 w-96 rounded-xl border border-gray-200 bg-white shadow-lg overflow-hidden z-50">
+                <div className="px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-semibold text-gray-900">Notifications</p>
+                  <p className="text-xs text-gray-500">Project invitations and updates</p>
+                </div>
+                {invitationError && (
+                  <div className="px-4 py-2 text-xs text-red-600 bg-red-50 border-b border-red-100">
+                    {invitationError}
+                  </div>
+                )}
+                <div className="max-h-80 overflow-y-auto">
+                  {loadingInvitations ? (
+                    <div className="px-4 py-6 text-sm text-gray-500">Loading invitations...</div>
+                  ) : pendingInvitations.length === 0 ? (
+                    <div className="px-4 py-6 text-sm text-gray-500">No pending invitations.</div>
+                  ) : (
+                    pendingInvitations.map((invitation) => (
+                      <div key={invitation.id} className="px-4 py-3 border-b border-gray-100 last:border-b-0">
+                        <p className="text-sm text-gray-900">
+                          You were invited to <span className="font-semibold">{invitation.project_name}</span>
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Role: {invitation.role === 'member' ? 'Member' : 'Viewer'} · Expires{' '}
+                          {new Date(invitation.expires_at).toLocaleDateString()}
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptInvitation(invitation.token, invitation.project_id)}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-md bg-emerald-600 text-white hover:bg-emerald-700"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeclineInvitation(invitation.token)}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-200 text-gray-700 hover:bg-gray-50"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="relative" ref={menuRef}>
             <button
               type="button"
@@ -178,6 +374,14 @@ export function AppTopBar() {
                     onClick={() => setMenuOpen(false)}
                   >
                     Account settings
+                  </Link>
+                  <Link
+                    href="/"
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    role="menuitem"
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    Go to home
                   </Link>
                   <button
                     type="button"

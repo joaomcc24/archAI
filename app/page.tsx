@@ -335,12 +335,12 @@ export default function Home() {
           {/* ── Left: Copy ── */}
           <div>
             <FadeIn>
-              <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/[0.06] text-[13px] text-emerald-300/80 mb-8 font-mono">
+              <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/[0.06] text-[13px] text-emerald-700/80 mb-8 font-mono">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
                   <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
                 </span>
-                Now live — drift detection &amp; teams
+                Now live — drift detection &amp; teams &amp; task planning
               </div>
             </FadeIn>
 

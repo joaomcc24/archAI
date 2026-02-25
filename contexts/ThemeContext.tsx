@@ -14,7 +14,7 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const STORAGE_KEY = 'site-theme';
 
 function getInitialTheme(): ThemeMode {
-  if (typeof window === 'undefined') return 'noir';
+  if (typeof window === 'undefined') return 'dark';
 
   const stored = window.localStorage.getItem(STORAGE_KEY);
   if (stored === 'light' || stored === 'dark') {

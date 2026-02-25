@@ -1,17 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+
+  const nextPathRaw = searchParams.get('next');
+  const nextPath = nextPathRaw && nextPathRaw.startsWith('/') ? nextPathRaw : '/dashboard';
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -33,7 +37,7 @@ export default function LoginPage() {
 
       if (error) throw error;
 
-      router.push('/dashboard');
+      router.push(nextPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in');
     } finally {
@@ -50,6 +54,9 @@ export default function LoginPage() {
         provider: 'github',
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            next: nextPath,
+          },
         },
       });
 
@@ -139,7 +146,7 @@ export default function LoginPage() {
             <h1 className="text-2xl font-bold text-slate-900">Welcome back</h1>
             <p className="mt-2 text-slate-600">
               Don&apos;t have an account?{' '}
-              <Link href="/signup" className="text-slate-900 font-medium hover:underline">
+              <Link href={`/signup${nextPath !== '/dashboard' ? `?next=${encodeURIComponent(nextPath)}` : ''}`} className="text-slate-900 font-medium hover:underline">
                 Sign up for free
               </Link>
             </p>

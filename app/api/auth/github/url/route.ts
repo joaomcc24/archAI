@@ -7,11 +7,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'GitHub client ID not configured' }, { status: 500 });
   }
 
-  const redirectUri =
-    process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/auth/github/callback';
+  const redirectUri = process.env.GITHUB_REDIRECT_URI;
+  if (!redirectUri) {
+    if (process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        { error: 'GITHUB_REDIRECT_URI must be configured in production.' },
+        { status: 500 }
+      );
+    }
+
+    console.warn(
+      'GITHUB_REDIRECT_URI is not set. Falling back to http://localhost:3000/auth/github/callback for GitHub OAuth.'
+    );
+  }
+
+  const effectiveRedirectUri = redirectUri || 'http://localhost:3000/auth/github/callback';
   const state = Math.random().toString(36).substring(7);
 
-  const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo&state=${state}`;
+  const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+    effectiveRedirectUri
+  )}&scope=repo&state=${state}`;
 
   const response = NextResponse.json({ authUrl });
   response.cookies.set({

@@ -29,21 +29,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // #region agent log
-    try{const fs=await import('fs');fs.appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'app/api/auth/github/connect/route.ts:23',message:'Before limit check',data:{userId:auth.user.id,repoName,limitType:'repos'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})+'\n');}catch(e){}
-    // #endregion
-
     // Check repository limit before connecting
     const limitCheck = await billingService.checkLimit(auth.user.id, 'repos');
-    
-    // #region agent log
-    try{const fs=await import('fs');fs.appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'app/api/auth/github/connect/route.ts:27',message:'Limit check result',data:{allowed:limitCheck.allowed,current:limitCheck.current,limit:limitCheck.limit},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})+'\n');}catch(e){}
-    // #endregion
 
     if (!limitCheck.allowed) {
-      // #region agent log
-      try{const fs=await import('fs');fs.appendFileSync('/Users/joaocardoso/SaaS/archassistant/.cursor/debug.log',JSON.stringify({location:'app/api/auth/github/connect/route.ts:30',message:'Limit exceeded - returning 403',data:{current:limitCheck.current,limit:limitCheck.limit,comparison:`${limitCheck.current} < ${limitCheck.limit} = ${limitCheck.current < limitCheck.limit}`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})+'\n');}catch(e){}
-      // #endregion
       const error = new LimitExceededError(
         'repositories',
         limitCheck.current,
