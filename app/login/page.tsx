@@ -108,8 +108,8 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="relative z-10">
           <Link href="/" className="flex items-center gap-2">
-            <img src="/favicon.ico" alt="RepoLens" className="w-10 h-10" />
-            <span className="font-semibold text-white text-xl">RepoLens</span>
+            <img src="/favicon.ico" alt="Blueprintly" className="w-10 h-10" />
+            <span className="font-semibold text-white text-xl">Blueprintly</span>
           </Link>
         </div>
 
@@ -127,7 +127,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <div className="relative z-10 text-center">
-          <p className="text-white/40 text-sm">© 2026 RepoLens. All rights reserved.</p>
+          <p className="text-white/40 text-sm">© 2026 Blueprintly. All rights reserved.</p>
         </div>
       </div>
 
@@ -137,8 +137,8 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="lg:hidden mb-8">
             <Link href="/" className="flex items-center gap-2">
-              <img src="/favicon.ico" alt="RepoLens" className="w-8 h-8" />
-              <span className="font-semibold text-slate-900">RepoLens</span>
+              <img src="/favicon.ico" alt="Blueprintly" className="w-8 h-8" />
+              <span className="font-semibold text-slate-900">Blueprintly</span>
             </Link>
           </div>
 

@@ -50,8 +50,8 @@ export default function ForgotPasswordPage() {
       <div className="min-h-screen bg-white flex items-center justify-center p-8">
         <div className="w-full max-w-md text-center">
           <Link href="/" className="inline-flex items-center gap-2 mb-8">
-            <Image src="/favicon.ico" alt="RepoLens" width={32} height={32} />
-            <span className="font-semibold text-slate-900 text-lg">RepoLens</span>
+            <Image src="/favicon.ico" alt="Blueprintly" width={32} height={32} />
+            <span className="font-semibold text-slate-900 text-lg">Blueprintly</span>
           </Link>
           <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-xl">
             <h1 className="text-xl font-semibold text-slate-900 mb-2">Check your email</h1>
@@ -77,8 +77,8 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-white flex items-center justify-center p-8">
       <div className="w-full max-w-md">
         <Link href="/" className="inline-flex items-center gap-2 mb-8">
-          <Image src="/favicon.ico" alt="RepoLens" width={32} height={32} />
-          <span className="font-semibold text-slate-900 text-lg">RepoLens</span>
+          <Image src="/favicon.ico" alt="Blueprintly" width={32} height={32} />
+          <span className="font-semibold text-slate-900 text-lg">Blueprintly</span>
         </Link>
         <h1 className="text-2xl font-bold text-slate-900 mb-2">Reset password</h1>
         <p className="text-slate-600 text-sm mb-6">

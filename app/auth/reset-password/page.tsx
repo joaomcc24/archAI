@@ -63,8 +63,8 @@ export default function ResetPasswordPage() {
       <div className="min-h-screen bg-white flex items-center justify-center p-8">
         <div className="w-full max-w-md text-center">
           <Link href="/" className="inline-flex items-center gap-2 mb-8">
-            <Image src="/favicon.ico" alt="RepoLens" width={32} height={32} />
-            <span className="font-semibold text-slate-900 text-lg">RepoLens</span>
+            <Image src="/favicon.ico" alt="Blueprintly" width={32} height={32} />
+            <span className="font-semibold text-slate-900 text-lg">Blueprintly</span>
           </Link>
           <div className="p-4 bg-red-50 border border-red-100 rounded-xl mb-4">
             <p className="text-sm text-red-600">{error}</p>
@@ -85,8 +85,8 @@ export default function ResetPasswordPage() {
     <div className="min-h-screen bg-white flex items-center justify-center p-8">
       <div className="w-full max-w-md">
         <Link href="/" className="inline-flex items-center gap-2 mb-8">
-          <Image src="/favicon.ico" alt="RepoLens" width={32} height={32} />
-          <span className="font-semibold text-slate-900 text-lg">RepoLens</span>
+          <Image src="/favicon.ico" alt="Blueprintly" width={32} height={32} />
+          <span className="font-semibold text-slate-900 text-lg">Blueprintly</span>
         </Link>
         <h1 className="text-2xl font-bold text-slate-900 mb-2">Set new password</h1>
         <p className="text-slate-600 text-sm mb-6">

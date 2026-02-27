@@ -1,10 +1,10 @@
 export default function Head() {
   return (
     <>
-      <title>Account Settings – RepoLens</title>
+      <title>Account Settings – Blueprintly</title>
       <meta
         name="description"
-        content="Manage your RepoLens account details, theme preferences, analytics, billing, and data exports."
+        content="Manage your Blueprintly account details, theme preferences, analytics, billing, and data exports."
       />
     </>
   );

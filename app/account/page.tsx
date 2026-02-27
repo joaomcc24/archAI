@@ -63,7 +63,7 @@ export default function AccountPage() {
       }
 
       const exportData = JSON.parse(text);
-      downloadJson(`repolens-export-${user.id}.json`, exportData);
+      downloadJson(`blueprintly-export-${user.id}.json`, exportData);
 
       if (Array.isArray(exportData?.errors) && exportData.errors.length > 0) {
         setExportWarning(`Export completed with warnings: ${exportData.errors.join(' | ')}`);
@@ -81,7 +81,7 @@ export default function AccountPage() {
     setDeleteError(null);
 
     const confirmed = window.confirm(
-      'Are you sure? This will permanently delete your RepoLens account and associated data.'
+      'Are you sure? This will permanently delete your Blueprintly account and associated data.'
     );
     if (!confirmed) return;
 
@@ -229,7 +229,7 @@ export default function AccountPage() {
             <div className="mt-4 flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Analytics</p>
-                <p className="text-gray-900 font-medium">Help improve RepoLens by sharing anonymous usage.</p>
+                <p className="text-gray-900 font-medium">Help improve Blueprintly by sharing anonymous usage.</p>
               </div>
               <button
                 type="button"

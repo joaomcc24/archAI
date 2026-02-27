@@ -212,12 +212,12 @@ export function AppTopBar() {
         <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-sm">
           <Image
             src="/favicon.ico"
-            alt="RepoLens"
+            alt="Blueprintly"
             width={28}
             height={28}
             className="rounded-md"
           />
-          RepoLens
+          Blueprintly
         </Link>
 
         <div className="flex items-center gap-3">

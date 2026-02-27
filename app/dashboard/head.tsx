@@ -1,10 +1,10 @@
 export default function Head() {
   return (
     <>
-      <title>Dashboard – RepoLens</title>
+      <title>Dashboard – Blueprintly</title>
       <meta
         name="description"
-        content="View your connected repositories, architecture snapshots, and generated tasks in your RepoLens dashboard."
+        content="View your connected repositories, architecture snapshots, and generated tasks in your Blueprintly dashboard."
       />
     </>
   );

@@ -37,8 +37,8 @@ function renderInvitationEmailHtml(params: InvitationEmailParams): string {
             <tr>
               <td style="background:linear-gradient(135deg,#0f172a,#1e293b);padding:24px;">
                 <div style="display:flex;align-items:center;gap:10px;">
-                  <img src="https://repolens.ai/favicon.ico" alt="RepoLens" width="28" height="28" style="border-radius:6px;display:block;" />
-                  <span style="color:#e2e8f0;font-size:14px;font-weight:600;letter-spacing:.02em;">RepoLens</span>
+                  <img src="https://blueprintly.ai/favicon.ico" alt="Blueprintly" width="28" height="28" style="border-radius:6px;display:block;" />
+                  <span style="color:#e2e8f0;font-size:14px;font-weight:600;letter-spacing:.02em;">Blueprintly</span>
                 </div>
                 <h1 style="margin:16px 0 0;font-size:24px;line-height:1.2;color:#ffffff;">You've been invited to collaborate</h1>
               </td>
@@ -47,7 +47,7 @@ function renderInvitationEmailHtml(params: InvitationEmailParams): string {
               <td style="padding:24px;">
                 <p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#334155;">
                   <strong>${safeInviterEmail}</strong> invited you to join
-                  <strong>${safeProjectName}</strong> on RepoLens.
+                  <strong>${safeProjectName}</strong> on Blueprintly.
                 </p>
                 <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#334155;">
                   Your role: <strong>${safeRole}</strong>
@@ -91,7 +91,7 @@ export async function sendProjectInvitationEmail(params: InvitationEmailParams):
     throw new Error('INVITATION_EMAIL_FROM (or RESEND_FROM_EMAIL) is not configured');
   }
 
-  const subject = `You're invited to ${params.projectName} on RepoLens`;
+  const subject = `You're invited to ${params.projectName} on Blueprintly`;
   const html = renderInvitationEmailHtml(params);
 
   const response = await fetch('https://api.resend.com/emails', {

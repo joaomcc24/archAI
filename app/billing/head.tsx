@@ -1,10 +1,10 @@
 export default function Head() {
   return (
     <>
-      <title>Billing – RepoLens</title>
+      <title>Billing – Blueprintly</title>
       <meta
         name="description"
-        content="Manage your RepoLens subscription, view usage limits, and upgrade to Pro or Team plans."
+        content="Manage your Blueprintly subscription, view usage limits, and upgrade to Pro or Team plans."
       />
     </>
   );

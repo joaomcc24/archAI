@@ -13,7 +13,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "RepoLens",
+  title: "Blueprintly",
   description: "Generate architecture documentation for your GitHub repositories using AI",
 };
 

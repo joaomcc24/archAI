@@ -162,12 +162,12 @@ export default function Home() {
           <Link href="/" className="flex items-center gap-2.5">
             <Image
               src="/favicon.ico"
-              alt="RepoLens"
+              alt="Blueprintly"
               width={32}
               height={32}
               className="rounded-lg shadow-lg shadow-emerald-500/20"
             />
-            <span className="font-semibold text-[15px] tracking-tight">RepoLens</span>
+            <span className="font-semibold text-[15px] tracking-tight">Blueprintly</span>
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
@@ -633,7 +633,7 @@ export default function Home() {
               {
                 step: '02',
                 title: 'Generate docs',
-                desc: 'One click. RepoLens parses your file tree, detects your stack, and generates architecture.md.',
+                desc: 'One click. Blueprintly parses your file tree, detects your stack, and generates architecture.md.',
               },
               {
                 step: '03',
@@ -783,19 +783,19 @@ export default function Home() {
           <div className="flex items-center gap-2.5">
             <Image
               src="/favicon.ico"
-              alt="RepoLens"
+              alt="Blueprintly"
               width={24}
               height={24}
               className="rounded-md shadow-lg shadow-emerald-500/20"
             />
-            <span className="text-[14px] font-medium text-zinc-500">RepoLens</span>
+            <span className="text-[14px] font-medium text-zinc-500">Blueprintly</span>
           </div>
           <div className="flex items-center gap-6 text-[13px] text-zinc-600">
             <a href="#features" className="hover:text-zinc-300 transition-colors">Features</a>
             <a href="#how-it-works" className="hover:text-zinc-300 transition-colors">How it works</a>
             <a href="#pricing" className="hover:text-zinc-300 transition-colors">Pricing</a>
           </div>
-          <p className="text-[13px] text-zinc-700">&copy; 2026 RepoLens</p>
+          <p className="text-[13px] text-zinc-700">&copy; 2026 Blueprintly</p>
         </div>
       </footer>
     </div>

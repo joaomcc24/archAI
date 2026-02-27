@@ -7,10 +7,10 @@ export default async function Head({ params }: Props) {
 
   return (
     <>
-      <title>Task {id} – RepoLens</title>
+      <title>Task {id} – Blueprintly</title>
       <meta
         name="description"
-        content="View an implementation task generated from your architecture documentation in RepoLens."
+        content="View an implementation task generated from your architecture documentation in Blueprintly."
       />
     </>
   );

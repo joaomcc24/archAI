@@ -236,7 +236,7 @@ function SnapshotPageContent({ params }: { params: Promise<{ id: string }> }) {
               <div class="pdf-title">${title}</div>
               <div class="pdf-subtitle">Generated on ${formattedDate}</div>
             </div>
-            <div class="pdf-badge">RepoLens</div>
+            <div class="pdf-badge">Blueprintly</div>
           </div>
           <div class="pdf-divider"></div>
           <div class="pdf-content">${html}</div>
